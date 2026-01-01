@@ -1,0 +1,22 @@
+{
+  "private": true,
+  "name": "fontpub-indexer",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "hono": "^4.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240614.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0",
+    "wrangler": "^3.60.0"
+  }
+}
+

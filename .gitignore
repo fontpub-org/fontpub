@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test outputs
+coverage/
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+.dev.vars
+
+# Cloudflare Workers
+.wrangler/
+
+# Go
+cli/fontpub
