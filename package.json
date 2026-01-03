@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "name": "fontpub",
+  "scripts": {
+    "dev:indexer": "pnpm --filter indexer dev",
+    "dev:website": "pnpm --filter website dev",
+    "build:indexer": "pnpm --filter indexer build",
+    "build:website": "pnpm --filter website build",
+    "test": "pnpm -r test",
+    "deploy:indexer": "pnpm --filter indexer deploy"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
+
