@@ -18,4 +18,5 @@ func init() {
 	rootCmd.AddCommand(deactivateCmd)
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(uninstallCmd)
+	rootCmd.AddCommand(listCmd)
 }
