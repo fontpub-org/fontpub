@@ -19,4 +19,5 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(uninstallCmd)
 	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(statusCmd)
 }
