@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/fontpub/cli/pkg/activation"
 	"github.com/fontpub/cli/pkg/downloader"
@@ -41,10 +42,10 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Fetch index
+	// Fetch root index
 	fmt.Println("Fetching package index...")
 	client := index.NewClient()
-	idx, err := client.Fetch()
+	idx, err := client.FetchIndex()
 	if err != nil {
 		return fmt.Errorf("failed to fetch index: %w", err)
 	}
@@ -65,15 +66,15 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Get latest version from index
-		pkgInfo, err := idx.GetPackage(pkgName)
+		// Get latest version from root index
+		pkgSummary, err := idx.GetPackage(pkgName)
 		if err != nil {
 			fmt.Printf("Warning: package %s not found in index, skipping\n", pkgName)
 			continue
 		}
 
 		// Compare versions
-		isNewer, err := version.IsNewer(pkgInfo.LatestVersion, pkgEntry.Version)
+		isNewer, err := version.IsNewer(pkgSummary.LatestVersion, pkgEntry.Version)
 		if err != nil {
 			fmt.Printf("Warning: failed to compare versions for %s: %v\n", pkgName, err)
 			continue
@@ -84,12 +85,20 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Download new version
-		newVersion := pkgInfo.LatestVersion
+		// Fetch package detail for the new version
+		newVersion := pkgSummary.LatestVersion
 		fmt.Printf("Updating %s: %s -> %s\n", pkgName, pkgEntry.Version, newVersion)
 
+		detail, err := client.FetchPackageDetail(pkgName)
+		if err != nil {
+			fmt.Printf("Warning: failed to fetch details for %s: %v\n", pkgName, err)
+			continue
+		}
+
+		// Download new version
 		var files []lockfile.FileEntry
-		for filename, asset := range pkgInfo.Assets {
+		for _, asset := range detail.Assets {
+			filename := filepath.Base(asset.Path)
 			destPath := paths.PackageFilePath(pkg.Username, pkg.Fontname, newVersion, filename)
 			fmt.Printf("  Downloading %s...\n", filename)
 

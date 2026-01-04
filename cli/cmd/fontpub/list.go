@@ -68,7 +68,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Try to fetch index for version comparison
 	var idx *index.Index
 	client := index.NewClient()
-	idx, indexErr := client.Fetch()
+	idx, indexErr := client.FetchIndex()
 	if indexErr != nil && !listJSONOutput {
 		fmt.Fprintf(os.Stderr, "Warning: Could not fetch index, latest version info unavailable\n\n")
 	}

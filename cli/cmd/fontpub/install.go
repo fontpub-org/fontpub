@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/fontpub/cli/pkg/activation"
 	"github.com/fontpub/cli/pkg/downloader"
@@ -50,21 +51,21 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load lockfile: %w", err)
 	}
 
-	// Fetch index
+	// Step 1: Fetch root index to get latest version
 	fmt.Println("Fetching package index...")
 	client := index.NewClient()
-	idx, err := client.Fetch()
+	idx, err := client.FetchIndex()
 	if err != nil {
 		return fmt.Errorf("failed to fetch index: %w", err)
 	}
 
-	// Find package
-	pkgInfo, err := idx.GetPackage(pkg.String())
+	// Find package in index
+	pkgSummary, err := idx.GetPackage(pkg.String())
 	if err != nil {
 		return err
 	}
 
-	version := pkgInfo.LatestVersion
+	version := pkgSummary.LatestVersion
 	fmt.Printf("Found %s version %s\n", pkg.String(), version)
 
 	// Check if already installed
@@ -76,12 +77,21 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Step 2: Fetch package detail to get asset information
+	fmt.Println("Fetching package details...")
+	detail, err := client.FetchPackageDetail(pkg.String())
+	if err != nil {
+		return fmt.Errorf("failed to fetch package details: %w", err)
+	}
+
 	// Download and verify each asset
 	fmt.Println("Downloading fonts...")
 	dl := downloader.New()
 
 	var files []lockfile.FileEntry
-	for filename, asset := range pkgInfo.Assets {
+	for _, asset := range detail.Assets {
+		// Extract filename from path
+		filename := filepath.Base(asset.Path)
 		destPath := paths.PackageFilePath(pkg.Username, pkg.Fontname, version, filename)
 		fmt.Printf("  Downloading %s...\n", filename)
 
