@@ -11,7 +11,7 @@ import {
 import type { RootIndex, PackageDetail } from "../src/types";
 
 // Mock R2 bucket for testing
-class MockR2Bucket implements Partial<R2Bucket> {
+class MockR2Bucket {
   private storage = new Map<string, { body: string; etag: string }>();
   private etagCounter = 0;
 
@@ -48,9 +48,10 @@ class MockR2Bucket implements Partial<R2Bucket> {
     options?: R2PutOptions
   ): Promise<R2Object | null> {
     // Check conditional write
-    if (options?.onlyIf?.etagMatches) {
+    const onlyIf = options?.onlyIf as R2Conditional | undefined;
+    if (onlyIf && "etagMatches" in onlyIf && onlyIf.etagMatches) {
       const existing = this.storage.get(key);
-      if (!existing || existing.etag !== options.onlyIf.etagMatches) {
+      if (!existing || existing.etag !== onlyIf.etagMatches) {
         return null; // ETag mismatch
       }
     }
