@@ -118,10 +118,6 @@ export interface Env {
 // API Response Types
 // ============================================================
 
-export interface UpdateRequest {
-  // The JWT is passed via Authorization header
-}
-
 export interface UpdateResponse {
   success: boolean;
   message: string;

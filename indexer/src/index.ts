@@ -8,6 +8,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { handleGetIndex, handleGetPackageDetail } from "./handlers/static";
+import { handlePostUpdate } from "./handlers/update";
 import type { Env } from "./types";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -46,17 +47,7 @@ app.get("/v1/packages/:owner/:repo", handleGetPackageDetail);
 // ============================================================
 
 // Update endpoint - receives notifications from GitHub Actions
-// Phase 3-E: Will be implemented with full OIDC verification
-app.post("/v1/update", async (c) => {
-  // Placeholder for Phase 3-E
-  return c.json(
-    {
-      error: "Not implemented",
-      details: "POST /v1/update will be available in Phase 3-E",
-    },
-    501,
-  );
-});
+app.post("/v1/update", handlePostUpdate);
 
 // ============================================================
 // 404 Handler
