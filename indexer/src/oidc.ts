@@ -8,7 +8,8 @@ import type { GitHubOIDCClaims } from "./types";
 
 // GitHub OIDC constants
 const GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com";
-const GITHUB_JWKS_URL = "https://token.actions.githubusercontent.com/.well-known/jwks";
+const GITHUB_JWKS_URL =
+  "https://token.actions.githubusercontent.com/.well-known/jwks";
 
 // Cache JWKS for performance (refreshed periodically by jose)
 let jwksCache: jose.JWTVerifyGetKey | null = null;
@@ -34,7 +35,7 @@ export class OIDCVerificationError extends Error {
       | "INVALID_ISSUER"
       | "INVALID_AUDIENCE"
       | "EXPIRED"
-      | "MISSING_CLAIMS"
+      | "MISSING_CLAIMS",
   ) {
     super(message);
     this.name = "OIDCVerificationError";
@@ -50,7 +51,7 @@ export class OIDCVerificationError extends Error {
  */
 export async function verifyGitHubOIDCToken(
   token: string,
-  expectedAudience: string
+  expectedAudience: string,
 ): Promise<GitHubOIDCClaims> {
   try {
     const jwks = getJWKS();
@@ -67,21 +68,21 @@ export async function verifyGitHubOIDCToken(
     if (!claims.repository) {
       throw new OIDCVerificationError(
         "Missing required claim: repository",
-        "MISSING_CLAIMS"
+        "MISSING_CLAIMS",
       );
     }
 
     if (!claims.sha) {
       throw new OIDCVerificationError(
         "Missing required claim: sha",
-        "MISSING_CLAIMS"
+        "MISSING_CLAIMS",
       );
     }
 
     if (!claims.sub) {
       throw new OIDCVerificationError(
         "Missing required claim: sub",
-        "MISSING_CLAIMS"
+        "MISSING_CLAIMS",
       );
     }
 
@@ -100,20 +101,20 @@ export async function verifyGitHubOIDCToken(
       if (message.includes("iss")) {
         throw new OIDCVerificationError(
           `Invalid issuer: expected ${GITHUB_OIDC_ISSUER}`,
-          "INVALID_ISSUER"
+          "INVALID_ISSUER",
         );
       }
       if (message.includes("aud")) {
         throw new OIDCVerificationError(
           `Invalid audience: expected ${expectedAudience}`,
-          "INVALID_AUDIENCE"
+          "INVALID_AUDIENCE",
         );
       }
     }
 
     throw new OIDCVerificationError(
       `Token verification failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      "INVALID_TOKEN"
+      "INVALID_TOKEN",
     );
   }
 }
@@ -135,7 +136,3 @@ export function extractBearerToken(authHeader: string | null): string | null {
 
   return parts[1];
 }
-
-
-
-

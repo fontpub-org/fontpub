@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  deleteOwnership,
   getOwnership,
+  OwnershipError,
   registerOwnership,
   verifyOrRegisterOwnership,
-  deleteOwnership,
-  OwnershipError,
 } from "../src/ownership";
 import type { OwnershipRecord } from "../src/types";
 
@@ -12,7 +12,10 @@ import type { OwnershipRecord } from "../src/types";
 class MockKVNamespace {
   private storage = new Map<string, string>();
 
-  async get(key: string, format?: "text" | "json"): Promise<string | null | unknown> {
+  async get(
+    key: string,
+    format?: "text" | "json",
+  ): Promise<string | null | unknown> {
     const value = this.storage.get(key);
     if (value === undefined) return null;
     if (format === "json") {
@@ -45,7 +48,7 @@ describe("ownership", () => {
     it("should return null for non-existent repository", async () => {
       const result = await getOwnership(
         mockKV as unknown as KVNamespace,
-        "owner/repo"
+        "owner/repo",
       );
       expect(result).toBeNull();
     });
@@ -59,7 +62,7 @@ describe("ownership", () => {
 
       const result = await getOwnership(
         mockKV as unknown as KVNamespace,
-        "owner/repo"
+        "owner/repo",
       );
       expect(result).toEqual(record);
     });
@@ -70,10 +73,13 @@ describe("ownership", () => {
       await registerOwnership(
         mockKV as unknown as KVNamespace,
         "owner/repo",
-        "repo:owner/repo:ref:refs/heads/main"
+        "repo:owner/repo:ref:refs/heads/main",
       );
 
-      const stored = await mockKV.get("owner:owner/repo", "json") as OwnershipRecord;
+      const stored = (await mockKV.get(
+        "owner:owner/repo",
+        "json",
+      )) as OwnershipRecord;
       expect(stored.owner_sub).toBe("repo:owner/repo:ref:refs/heads/main");
       expect(stored.registered_at).toBeDefined();
     });
@@ -84,14 +90,14 @@ describe("ownership", () => {
       const result = await verifyOrRegisterOwnership(
         mockKV as unknown as KVNamespace,
         "owner/repo",
-        "repo:owner/repo:ref:refs/heads/main"
+        "repo:owner/repo:ref:refs/heads/main",
       );
 
       expect(result.isNewRegistration).toBe(true);
 
       const stored = await getOwnership(
         mockKV as unknown as KVNamespace,
-        "owner/repo"
+        "owner/repo",
       );
       expect(stored).not.toBeNull();
       expect(stored?.owner_sub).toBe("repo:owner/repo:ref:refs/heads/main");
@@ -102,14 +108,14 @@ describe("ownership", () => {
       await registerOwnership(
         mockKV as unknown as KVNamespace,
         "owner/repo",
-        "repo:owner/repo:ref:refs/heads/main"
+        "repo:owner/repo:ref:refs/heads/main",
       );
 
       // Second verification with same sub
       const result = await verifyOrRegisterOwnership(
         mockKV as unknown as KVNamespace,
         "owner/repo",
-        "repo:owner/repo:ref:refs/heads/main"
+        "repo:owner/repo:ref:refs/heads/main",
       );
 
       expect(result.isNewRegistration).toBe(false);
@@ -120,7 +126,7 @@ describe("ownership", () => {
       await registerOwnership(
         mockKV as unknown as KVNamespace,
         "owner/repo",
-        "repo:owner/repo:ref:refs/heads/main"
+        "repo:owner/repo:ref:refs/heads/main",
       );
 
       // Attempt by different sub
@@ -128,8 +134,8 @@ describe("ownership", () => {
         verifyOrRegisterOwnership(
           mockKV as unknown as KVNamespace,
           "owner/repo",
-          "repo:attacker/repo:ref:refs/heads/main"
-        )
+          "repo:attacker/repo:ref:refs/heads/main",
+        ),
       ).rejects.toThrow(OwnershipError);
     });
 
@@ -137,14 +143,14 @@ describe("ownership", () => {
       await registerOwnership(
         mockKV as unknown as KVNamespace,
         "owner/repo",
-        "repo:owner/repo:ref:refs/heads/main"
+        "repo:owner/repo:ref:refs/heads/main",
       );
 
       try {
         await verifyOrRegisterOwnership(
           mockKV as unknown as KVNamespace,
           "owner/repo",
-          "repo:attacker/repo:ref:refs/heads/main"
+          "repo:attacker/repo:ref:refs/heads/main",
         );
         expect.fail("Should have thrown");
       } catch (error) {
@@ -159,21 +165,21 @@ describe("ownership", () => {
       await registerOwnership(
         mockKV as unknown as KVNamespace,
         "owner/repo",
-        "repo:owner/repo:ref:refs/heads/main"
+        "repo:owner/repo:ref:refs/heads/main",
       );
 
       await deleteOwnership(mockKV as unknown as KVNamespace, "owner/repo");
 
       const result = await getOwnership(
         mockKV as unknown as KVNamespace,
-        "owner/repo"
+        "owner/repo",
       );
       expect(result).toBeNull();
     });
 
     it("should not throw when deleting non-existent record", async () => {
       await expect(
-        deleteOwnership(mockKV as unknown as KVNamespace, "nonexistent/repo")
+        deleteOwnership(mockKV as unknown as KVNamespace, "nonexistent/repo"),
       ).resolves.not.toThrow();
     });
   });
@@ -187,7 +193,3 @@ describe("OwnershipError", () => {
     expect(error.message).toBe("test message");
   });
 });
-
-
-
-

@@ -33,21 +33,21 @@ function parseSegments(v: string): number[] {
   for (const part of parts) {
     if (part === "") {
       throw new InvalidVersionError(
-        "invalid version format: must contain only digits and dots"
+        "invalid version format: must contain only digits and dots",
       );
     }
 
     // Check for non-digit characters
     if (!/^\d+$/.test(part)) {
       throw new InvalidVersionError(
-        "invalid version format: must contain only digits and dots"
+        "invalid version format: must contain only digits and dots",
       );
     }
 
     const num = parseInt(part, 10);
     if (num < 0) {
       throw new InvalidVersionError(
-        "invalid version format: segments must be non-negative"
+        "invalid version format: segments must be non-negative",
       );
     }
 
@@ -113,4 +113,3 @@ export function compareVersions(v1: string, v2: string): -1 | 0 | 1 {
 export function isNewer(v1: string, v2: string): boolean {
   return compareVersions(v1, v2) > 0;
 }
-

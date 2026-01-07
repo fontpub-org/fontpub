@@ -2,20 +2,16 @@
  * Static file handlers for serving index data from R2.
  */
 
-import { Context } from "hono";
+import type { Context } from "hono";
+import { createEmptyIndex, getPackageDetail, getRootIndex } from "../storage";
 import type { Env, ErrorResponse } from "../types";
-import {
-  getRootIndex,
-  getPackageDetail,
-  createEmptyIndex,
-} from "../storage";
 
 /**
  * GET /v1/index.json
  * Returns the root index with all package summaries.
  */
 export async function handleGetIndex(
-  c: Context<{ Bindings: Env }>
+  c: Context<{ Bindings: Env }>,
 ): Promise<Response> {
   const result = await getRootIndex(c.env.INDEX_BUCKET);
 
@@ -37,7 +33,7 @@ export async function handleGetIndex(
  * Returns detailed information for a specific package.
  */
 export async function handleGetPackageDetail(
-  c: Context<{ Bindings: Env }>
+  c: Context<{ Bindings: Env }>,
 ): Promise<Response> {
   const owner = c.req.param("owner");
   let repo = c.req.param("repo");

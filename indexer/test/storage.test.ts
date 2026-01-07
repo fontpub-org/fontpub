@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
-  getRootIndex,
-  putRootIndex,
-  getPackageDetail,
-  putPackageDetail,
   createEmptyIndex,
+  getPackageDetail,
   getPackagePath,
+  getRootIndex,
   INDEX_PATH,
+  putPackageDetail,
+  putRootIndex,
 } from "../src/storage";
-import type { RootIndex, PackageDetail } from "../src/types";
+import type { PackageDetail, RootIndex } from "../src/types";
 
 // Mock R2 bucket for testing
 class MockR2Bucket {
@@ -45,7 +45,7 @@ class MockR2Bucket {
   async put(
     key: string,
     value: string | ReadableStream | ArrayBuffer | Blob | null,
-    options?: R2PutOptions
+    options?: R2PutOptions,
   ): Promise<R2Object | null> {
     // Check conditional write
     const onlyIf = options?.onlyIf as R2Conditional | undefined;
@@ -125,10 +125,7 @@ describe("storage", () => {
         },
       };
 
-      const success = await putRootIndex(
-        bucket as unknown as R2Bucket,
-        index
-      );
+      const success = await putRootIndex(bucket as unknown as R2Bucket, index);
 
       expect(success).toBe(true);
 
@@ -158,7 +155,7 @@ describe("storage", () => {
       const success = await putRootIndex(
         bucket as unknown as R2Bucket,
         updated,
-        etag
+        etag,
       );
 
       expect(success).toBe(true);
@@ -182,7 +179,7 @@ describe("storage", () => {
       const success = await putRootIndex(
         bucket as unknown as R2Bucket,
         updated,
-        "wrong-etag"
+        "wrong-etag",
       );
 
       expect(success).toBe(false);
@@ -194,7 +191,7 @@ describe("storage", () => {
       const result = await getPackageDetail(
         bucket as unknown as R2Bucket,
         "unknown",
-        "package"
+        "package",
       );
       expect(result).toBeNull();
     });
@@ -218,7 +215,7 @@ describe("storage", () => {
       const result = await getPackageDetail(
         bucket as unknown as R2Bucket,
         "owner",
-        "myfont"
+        "myfont",
       );
 
       expect(result).not.toBeNull();
@@ -240,13 +237,13 @@ describe("storage", () => {
         bucket as unknown as R2Bucket,
         "owner",
         "newfont",
-        detail
+        detail,
       );
 
       const result = await getPackageDetail(
         bucket as unknown as R2Bucket,
         "owner",
-        "newfont"
+        "newfont",
       );
 
       expect(result).not.toBeNull();
@@ -264,9 +261,8 @@ describe("storage", () => {
   describe("getPackagePath", () => {
     it("generates correct path", () => {
       expect(getPackagePath("alice", "myfont")).toBe(
-        "v1/packages/alice/myfont.json"
+        "v1/packages/alice/myfont.json",
       );
     });
   });
 });
-

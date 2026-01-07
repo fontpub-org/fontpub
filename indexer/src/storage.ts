@@ -3,7 +3,7 @@
  * Handles reading and writing JSON files with ETag support for conditional writes.
  */
 
-import type { RootIndex, PackageDetail } from "./types";
+import type { PackageDetail, RootIndex } from "./types";
 
 // R2 object paths
 export const INDEX_PATH = "v1/index.json";
@@ -22,7 +22,7 @@ export interface ReadResult<T> {
  * Returns null if the index doesn't exist yet.
  */
 export async function getRootIndex(
-  bucket: R2Bucket
+  bucket: R2Bucket,
 ): Promise<ReadResult<RootIndex> | null> {
   const object = await bucket.get(INDEX_PATH);
 
@@ -47,7 +47,7 @@ export async function getRootIndex(
 export async function putRootIndex(
   bucket: R2Bucket,
   index: RootIndex,
-  expectedEtag?: string
+  expectedEtag?: string,
 ): Promise<boolean> {
   const body = JSON.stringify(index, null, 2);
 
@@ -93,7 +93,7 @@ export function getPackagePath(owner: string, repo: string): string {
 export async function getPackageDetail(
   bucket: R2Bucket,
   owner: string,
-  repo: string
+  repo: string,
 ): Promise<ReadResult<PackageDetail> | null> {
   const path = getPackagePath(owner, repo);
   const object = await bucket.get(path);
@@ -116,7 +116,7 @@ export async function putPackageDetail(
   bucket: R2Bucket,
   owner: string,
   repo: string,
-  detail: PackageDetail
+  detail: PackageDetail,
 ): Promise<void> {
   const path = getPackagePath(owner, repo);
   const body = JSON.stringify(detail, null, 2);
@@ -134,9 +134,8 @@ export async function putPackageDetail(
 export async function deletePackageDetail(
   bucket: R2Bucket,
   owner: string,
-  repo: string
+  repo: string,
 ): Promise<void> {
   const path = getPackagePath(owner, repo);
   await bucket.delete(path);
 }
-

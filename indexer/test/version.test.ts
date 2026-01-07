@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  isValidVersion,
   compareVersions,
-  isNewer,
   InvalidVersionError,
+  isNewer,
+  isValidVersion,
 } from "../src/version";
 
 describe("isValidVersion", () => {
@@ -104,13 +104,13 @@ describe("compareVersions", () => {
   // Invalid versions should throw
   it("should throw for invalid version with alpha suffix", () => {
     expect(() => compareVersions("1.0.0-alpha", "1.0.0")).toThrow(
-      InvalidVersionError
+      InvalidVersionError,
     );
   });
 
   it("should throw for invalid version string", () => {
     expect(() => compareVersions("1.0.0", "invalid")).toThrow(
-      InvalidVersionError
+      InvalidVersionError,
     );
   });
 
@@ -137,4 +137,3 @@ describe("isNewer", () => {
     expect(() => isNewer("invalid", "1.0")).toThrow(InvalidVersionError);
   });
 });
-

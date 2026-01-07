@@ -14,7 +14,7 @@ const OWNERSHIP_PREFIX = "owner:";
 export class OwnershipError extends Error {
   constructor(
     message: string,
-    public readonly code: "NOT_OWNER" | "KV_ERROR"
+    public readonly code: "NOT_OWNER" | "KV_ERROR",
   ) {
     super(message);
     this.name = "OwnershipError";
@@ -36,7 +36,7 @@ function getOwnershipKey(repository: string): string {
  */
 export async function getOwnership(
   kv: KVNamespace,
-  repository: string
+  repository: string,
 ): Promise<OwnershipRecord | null> {
   const key = getOwnershipKey(repository);
   const value = await kv.get(key, "json");
@@ -52,7 +52,7 @@ export async function getOwnership(
 export async function registerOwnership(
   kv: KVNamespace,
   repository: string,
-  ownerSub: string
+  ownerSub: string,
 ): Promise<void> {
   const key = getOwnershipKey(repository);
   const record: OwnershipRecord = {
@@ -75,7 +75,7 @@ export async function registerOwnership(
 export async function verifyOrRegisterOwnership(
   kv: KVNamespace,
   repository: string,
-  sub: string
+  sub: string,
 ): Promise<{ isNewRegistration: boolean }> {
   const existing = await getOwnership(kv, repository);
 
@@ -89,7 +89,7 @@ export async function verifyOrRegisterOwnership(
   if (existing.owner_sub !== sub) {
     throw new OwnershipError(
       `Repository ${repository} is owned by a different entity`,
-      "NOT_OWNER"
+      "NOT_OWNER",
     );
   }
 
@@ -103,12 +103,8 @@ export async function verifyOrRegisterOwnership(
  */
 export async function deleteOwnership(
   kv: KVNamespace,
-  repository: string
+  repository: string,
 ): Promise<void> {
   const key = getOwnershipKey(repository);
   await kv.delete(key);
 }
-
-
-
-

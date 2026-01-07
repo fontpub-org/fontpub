@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { extractBearerToken, OIDCVerificationError } from "../src/oidc";
 
 describe("extractBearerToken", () => {
@@ -65,7 +65,3 @@ describe("OIDCVerificationError", () => {
 // Note: Testing verifyGitHubOIDCToken requires real GitHub OIDC tokens
 // which can only be obtained from GitHub Actions environment.
 // Integration tests should be done in a GitHub Actions workflow.
-
-
-
-

@@ -7,8 +7,8 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import type { Env } from "./types";
 import { handleGetIndex, handleGetPackageDetail } from "./handlers/static";
+import type { Env } from "./types";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -19,7 +19,7 @@ app.use(
     origin: "*",
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 
 // Health check
@@ -54,7 +54,7 @@ app.post("/v1/update", async (c) => {
       error: "Not implemented",
       details: "POST /v1/update will be available in Phase 3-E",
     },
-    501
+    501,
   );
 });
 
@@ -68,9 +68,8 @@ app.notFound((c) => {
       error: "Not found",
       details: `Path ${c.req.path} does not exist`,
     },
-    404
+    404,
   );
 });
 
 export default app;
-
