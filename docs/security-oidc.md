@@ -4,6 +4,8 @@ Fontpub v1 authenticates Indexer updates using GitHub Actions OIDC JWTs.
 
 This document specifies the validation rules for `POST /v1/update`.
 
+The expected publisher workflow layout is described in `publisher-workflow.md`.
+
 ## Token source
 
 The Indexer MUST only accept tokens issued by GitHub Actions OIDC:

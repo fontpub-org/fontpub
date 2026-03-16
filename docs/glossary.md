@@ -16,3 +16,4 @@
 - **Immutability**: Within a given package, a version key is immutable: if metadata, pinned source, or assets differ, the update must fail.
 - **Publisher commands**: CLI commands used to create, inspect, validate, and prepare `fontpub.json` and publication workflow files.
 - **End-user commands**: CLI commands used to list, install, activate, verify, repair, update, and remove packages.
+- **CLI JSON output**: The stable machine-readable JSON emitted by CLI commands when `--json` is set.

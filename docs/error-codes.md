@@ -1,8 +1,15 @@
 # Error Codes — v1
 
-This document defines canonical `error.code` values used by the Indexer API.
+This document defines canonical `error.code` values used by:
+- the Indexer API
+- CLI JSON error output
 
 Only the codes in this document are valid in v1.
+
+## Scope
+
+- Codes in the `Indexer API` sections are used by HTTP responses from the Indexer.
+- Codes in the `CLI` section are used by `fontpub --json` failure output.
 
 ## Authentication / Authorization
 
@@ -47,3 +54,14 @@ Only the codes in this document are valid in v1.
 - `UPSTREAM_FETCH_FAILED` — network or upstream error fetching from GitHub Raw
 - `RATE_LIMITED` — too many requests
 - `INTERNAL_ERROR` — unexpected server error
+
+## CLI
+
+- `TTY_REQUIRED` — the command requires interactive input but no TTY is available
+- `INPUT_REQUIRED` — required CLI input was not provided
+- `LOCKFILE_INVALID` — the local lockfile is missing required fields or is malformed
+- `LOCAL_FILE_MISSING` — an expected installed asset file is missing
+- `LOCAL_FILE_HASH_MISMATCH` — an installed asset file does not match the expected SHA-256
+- `ACTIVATION_BROKEN` — activation symlink state does not match the lockfile or expected target
+- `NOT_INSTALLED` — the requested package or version is not installed locally
+- `MULTIPLE_VERSIONS_INSTALLED` — an operation required an explicit version because multiple installed versions matched

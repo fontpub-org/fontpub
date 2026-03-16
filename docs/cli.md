@@ -130,6 +130,7 @@ The CLI has two top-level command groups:
   - missing or stale activation symlinks
   - `assets[].active` flags
 - `repair` MUST NOT silently install a different version from the network
+- `repair` MUST be local-only and MUST NOT fetch package metadata or asset bytes from the network
 - If a package is specified, limit repair to that package
 - MUST support `--dry-run`
 - MUST support `--yes`
@@ -159,8 +160,10 @@ The CLI has two top-level command groups:
 
 ### `fontpub package preview [PATH]`
 
-- Render the versioned package detail document that would be produced from the current repository state
+- Render a candidate package detail object derived from the current repository state
 - MUST NOT publish anything
+- `published_at` MUST be omitted or `null`
+- preview output MUST NOT be treated as byte-identical to a published versioned package detail document
 - MUST support `--json`
 
 ### `fontpub package inspect <font-file>`
@@ -198,30 +201,7 @@ When `--json` is set:
 - output MUST be a single JSON object
 - output MUST be stable enough for programmatic consumption
 - commands MUST NOT mix human-readable tables or prose into stdout
-
-Recommended top-level shape:
-
-```json
-{
-  "ok": true,
-  "command": "string",
-  "data": {}
-}
-```
-
-Recommended top-level shape on failure:
-
-```json
-{
-  "ok": false,
-  "command": "string",
-  "error": {
-    "code": "STRING_ENUM",
-    "message": "string",
-    "details": {}
-  }
-}
-```
+- CLI JSON output is specified in `cli-json.md`
 
 ## On-disk layout
 
@@ -289,6 +269,8 @@ Rules:
 - `installed_versions` keys MUST be version keys.
 - Each installed version record MUST preserve both the literal `version` string and the canonical `version_key`.
 - `active_version_key` MAY be null/omitted if not active.
+- If `active_version_key` is present, it MUST reference an installed version key for that package.
+- If `active_version_key` is present, at least one asset in that installed version MUST have `active: true`.
 - CLI flags or user inputs that name a version MUST accept any valid version string and normalize it to a version key before lookup.
 - `assets[].active` MUST reflect whether the symlink exists.
 - CLI MUST update the lockfile atomically.

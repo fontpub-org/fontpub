@@ -5,6 +5,8 @@ Fontpub is a distribution protocol and tooling ecosystem for open-source fonts.
 Core idea: the canonical source of truth for a font package is a GitHub repository. The Fontpub service ("Indexer") does not mirror font binaries; instead it publishes verifiable metadata (immutable URLs pinned to a commit SHA plus SHA-256 digests) that clients can use to securely download, verify, install, and activate fonts.
 
 Recommended implementation architecture is described in `architecture.md`.
+CLI machine-readable behavior is described in `cli-json.md`.
+Expected GitHub Actions publication workflow is described in `publisher-workflow.md`.
 
 ## Components
 
