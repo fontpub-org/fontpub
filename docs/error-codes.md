@@ -2,7 +2,7 @@
 
 This document defines canonical `error.code` values used by the Indexer API.
 
-Implementations MAY add additional codes, but SHOULD keep these stable.
+Only the codes in this document are valid in v1.
 
 ## Authentication / Authorization
 

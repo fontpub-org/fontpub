@@ -6,7 +6,7 @@ All endpoints are under `/v1`.
 
 ## Common headers
 
-- Responses SHOULD include `Content-Type: application/json; charset=utf-8`
+- Responses MUST include `Content-Type: application/json; charset=utf-8`
 - Read endpoints MUST include a strong `ETag`
 - Read endpoints MUST support `If-None-Match` and return `304 Not Modified`
 
@@ -33,10 +33,6 @@ All error responses MUST use:
 
 Returns the root index document (`indexes.md`).
 
-### Caching
-- MUST include `ETag`
-- SHOULD include `Cache-Control: public, max-age=60`
-
 ### Responses
 - `200 OK` with index JSON
 - `304 Not Modified` if `If-None-Match` matches
@@ -44,9 +40,6 @@ Returns the root index document (`indexes.md`).
 ## GET /v1/packages/{owner}/{repo}.json
 
 Returns the latest package detail alias.
-
-### Caching
-Same as root index.
 
 ### Responses
 - `200 OK` with package detail JSON
@@ -57,9 +50,6 @@ Same as root index.
 
 Returns the package versions index document.
 
-### Caching
-Same as root index.
-
 ### Responses
 - `200 OK` with package versions index JSON
 - `404 Not Found` with `error.code: PACKAGE_NOT_FOUND` if package does not exist
@@ -68,9 +58,6 @@ Same as root index.
 ## GET /v1/packages/{owner}/{repo}/versions/{version_key}.json
 
 Returns the immutable versioned package detail document for `version_key`.
-
-### Caching
-Same as root index.
 
 ### Responses
 - `200 OK` with package detail JSON
@@ -106,7 +93,7 @@ Request rules:
   - `fontpub.json` at the pinned `sha`
   - Each file declared in `fontpub.json`
 - The Indexer validates that the tag name in `ref` is a valid Numeric Dot version string and that its version key equals the manifest version key.
-- The Indexer computes SHA-256 and SHOULD compute `size_bytes` for each asset.
+- The Indexer computes SHA-256 for each asset.
 - The Indexer MUST reject:
   - files > 50 MiB
   - non-allowed extensions (`.otf`, `.ttf`, `.woff2`)
@@ -121,18 +108,13 @@ Request rules:
 
 ### Concurrency and consistency
 
-The root index update MUST be atomic under concurrency.
-
-Implementations SHOULD use conditional writes (ETag / if-match semantics) with limited retries.
-
 Consistency rules:
 - The versioned package detail document is the authoritative immutable record.
 - The package versions index, latest package detail alias, and root index are derived documents.
-- The Indexer MUST durably write the versioned package detail before making that version discoverable through derived documents.
-- If a derived-document update fails after the versioned package detail is written, the request MUST fail and MAY be safely retried.
-- A retry for an already-published immutable version MUST behave as an idempotent repair operation.
+- A version MUST NOT become discoverable through derived documents before its versioned package detail document is available.
+- If an update attempt fails after the versioned package detail document is written, retrying the same request MUST NOT alter that immutable document and MUST be sufficient to restore derived-document consistency.
 
-If the Indexer cannot complete a write due to repeated contention, it SHOULD return:
+If the Indexer cannot complete an update because it cannot preserve these consistency requirements, it MUST return:
 - `503 Service Unavailable`
 - With `Retry-After: 1`
 - With `error.code: INDEX_CONFLICT`

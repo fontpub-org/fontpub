@@ -1,8 +1,8 @@
-# Fontpub CLI (macOS) — v1
+# Fontpub CLI — v1
 
-The CLI installs and activates fonts on macOS using the Indexer metadata.
+The CLI installs and activates fonts using the Indexer metadata.
 
-This document defines CLI behavior and on-disk layout, not the exact command-line parser flags.
+This document defines CLI behavior and on-disk layout.
 
 ## Commands (conceptual)
 
@@ -11,7 +11,7 @@ This document defines CLI behavior and on-disk layout, not the exact command-lin
   - Print packages and latest versions
 
 - `fontpub install <owner>/<repo> [--version <v>]`
-  - Fetch root index (optional, for existence/latest)
+  - Fetch root index
   - If `--version` is omitted, fetch package detail `/v1/packages/<owner>/<repo>.json`
   - If `--version` is provided, normalize it to a version key and fetch `/v1/packages/<owner>/<repo>/versions/<version_key>.json`
   - Download each `asset.url`
@@ -44,9 +44,9 @@ This document defines CLI behavior and on-disk layout, not the exact command-lin
 - Lockfile:
   - `~/.fontpub/fontpub.lock`
 
-## Activation directory (macOS)
+## Activation directory
 
-- `~/Library/Fonts/from_fontpub/`
+- Activation target directory is platform-defined.
 
 Activation is implemented by symlinks into installed package files.
 
@@ -59,8 +59,7 @@ If a symlink name would collide:
 
 ## Atomic activation updates
 
-To avoid transient “missing font” states:
-- The CLI SHOULD create a temporary symlink and then `rename()` it into place.
+Activation updates MUST be atomic from the user's perspective.
 
 ## Lockfile schema
 
@@ -83,7 +82,7 @@ The lockfile is JSON.
               "sha256": "64-hex",
               "local_path": "/Users/<you>/.fontpub/packages/owner/repo/1.2.3/dist/ExampleSans-Regular.otf",
               "active": true,
-              "symlink_path": "/Users/<you>/Library/Fonts/from_fontpub/owner--repo--ExampleSans-Regular.otf"
+              "symlink_path": "/path/to/activation/owner--repo--ExampleSans-Regular.otf"
             }
           ]
         }
@@ -100,5 +99,5 @@ Rules:
 - Each installed version record MUST preserve both the literal `version` string and the canonical `version_key`.
 - `active_version_key` MAY be null/omitted if not active.
 - CLI flags or user inputs that name a version MUST accept any valid version string and normalize it to a version key before lookup.
-- `assets[].active` MUST reflect whether the symlink exists (or desired state if repairing).
-- CLI MUST update lockfile atomically (write temp file, fsync if feasible, rename).
+- `assets[].active` MUST reflect whether the symlink exists.
+- CLI MUST update the lockfile atomically.

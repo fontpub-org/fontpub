@@ -19,8 +19,7 @@ The Indexer MUST validate the JWT signature using GitHub's JWKS.
 ## Time validity
 
 - `exp` MUST be in the future
-- `iat` SHOULD be within ±10 minutes of server time
-- Implementations SHOULD allow up to **±60 seconds** clock skew
+- `iat` MUST be within ±10 minutes of server time
 
 ## Required claims (v1)
 
@@ -41,8 +40,7 @@ If any required claim is missing, reject with `401 Unauthorized` and error code 
 
 ## Ownership binding
 
-When a package is first registered:
-- Store `package_id -> sub` in durable storage (KV).
+When a package is first registered, the Indexer MUST bind `package_id` to `sub`.
 
 For subsequent updates:
 - Require the same `sub` for the same `package_id`.
@@ -58,18 +56,4 @@ To minimize attack surface, v1 restricts updates to release tags.
 - `<tag>` MUST itself be a valid Numeric Dot version string, with the same optional leading `v` or `V` support described in `versioning.md`
 - The tag's version key MUST equal the manifest version key
 
-Optional hardening (SHOULD if available in claims):
-- Restrict to a specific workflow file via `workflow_ref` or `job_workflow_ref`:
-  - MUST reference `.github/workflows/fontpub.yml@...`
-- Reject PR-triggered contexts if an `event_name` claim is available:
-  - Allow only `push` and/or `workflow_dispatch`
-
 If a token fails policy restrictions, reject with `403 Forbidden` and error code `WORKFLOW_NOT_ALLOWED`.
-
-## JWKS caching
-
-Implementations SHOULD cache GitHub JWKS for 1–6 hours.
-
-If a token fails signature verification:
-- Refresh JWKS once and retry verification exactly once.
-- If still failing, reject with `401 Unauthorized` and error code `AUTH_INVALID_TOKEN`.
