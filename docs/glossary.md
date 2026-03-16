@@ -14,3 +14,5 @@
 - **Authoritative artifact**: A published document whose contents are the canonical public record and are not derived from another public Fontpub document. In v1 this is the versioned package detail document.
 - **Derived document**: A published document regenerated from authoritative versioned package detail documents, such as the root index, package versions index, and latest package detail alias.
 - **Immutability**: Within a given package, a version key is immutable: if metadata, pinned source, or assets differ, the update must fail.
+- **Publisher commands**: CLI commands used to create, inspect, validate, and prepare `fontpub.json` and publication workflow files.
+- **End-user commands**: CLI commands used to list, install, activate, verify, repair, update, and remove packages.

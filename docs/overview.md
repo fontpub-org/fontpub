@@ -29,6 +29,7 @@ A tool that:
 - Lists packages via the root index
 - Installs packages by fetching a package detail document, downloading assets from GitHub Raw, and verifying SHA-256
 - Activates/deactivates fonts by linking them into a platform-defined font activation directory
+- Supports both human-oriented interactive use and deterministic machine-readable automation
 
 ## Design goals (v1)
 - Integrity: every installed file is verified against the Indexer-published SHA-256
