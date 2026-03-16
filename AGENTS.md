@@ -1,12 +1,16 @@
 # AGENTS.md (Codex Implementation Guide)
 
-This repository is a **monorepo** managed with **pnpm workspaces**. The goal is to implement **Fontpub v1**:
-- An **Indexer** (Cloudflare Workers) that notarizes packages (manifest + asset hashes) and publishes **Split Index** JSON to R2.
-- A **CLI** (Go, macOS) that installs/verifies/activates fonts based on the Indexer’s public indexes.
-- A shared set of **schemas** and **fixtures** to keep protocol compatibility.
+This repository defines **Fontpub v1** as a public-artifact-first font distribution protocol.
 
-This file is written for coding agents (Codex) and is the source of truth for:
-- repo structure & boundaries
+The implementation goal is:
+- an **Update API** that authenticates GitHub Actions OIDC update requests, fetches manifests and assets at SHA-pinned URLs, validates them, and publishes immutable metadata
+- a **Rebuilder** that regenerates derived indexes from already-published immutable metadata
+- a **CLI** that installs, verifies, and activates fonts from the public indexes
+- a shared **protocol** directory containing schemas, fixtures, golden JSON, and conformance tests
+
+This file is the implementation guide for coding agents. It is the source of truth for:
+- architecture and component boundaries
+- recommended repository layout
 - implementation order
 - TDD expectations
 - acceptance criteria
@@ -17,251 +21,324 @@ This file is written for coding agents (Codex) and is the source of truth for:
 ## 0. Non-negotiables
 
 ### MUST
-- Follow the specs in `docs/` exactly (v1).
-- Treat **Split Index** as canonical. Ignore any legacy index description elsewhere.
-- `fontpub.json` fields are **all required**.
-- `license` is **only** `"OFL-1.1"`.
-- Version strings must be **Numeric Dot** and **must not** contain leading zeros in any segment (e.g. `01.2` invalid; `0.100` valid).
+- Follow `docs/` exactly.
+- Treat the public **versioned package detail** document as the authoritative record for a published package version.
+- Treat the package versions index, latest package detail alias, and root index as **derived documents**.
+- Ensure derived documents are rebuildable from published versioned package detail documents.
+- Keep private state minimal:
+  - ownership binding
+  - JWT replay protection
+  - transient coordination needed to publish safely
+- `fontpub.json` fields are all required.
+- `license` is only `"OFL-1.1"`.
+- Version strings are Numeric Dot and must not contain leading zeros in any non-zero segment.
+- Do not store font binaries in Fontpub-managed storage.
 
 ### MUST NOT
-- Do not change on-wire JSON schemas or error codes without updating `docs/` and tests.
-- Do not broaden security acceptance (OIDC) beyond what `docs/security-oidc.md` specifies.
-- Do not store font binaries in the Indexer (only index JSON).
+- Do not change on-wire JSON schemas, paths, or error codes without updating `docs/` and tests.
+- Do not broaden OIDC acceptance beyond `docs/security-oidc.md`.
+- Do not make private state the authoritative source for published package metadata.
+- Do not require unrecoverable internal state in order to serve already-published metadata.
 
 ### SHOULD
-- Prefer small, composable modules with deterministic unit tests.
-- Add fixtures for any non-trivial edge case.
+- Prefer small, composable packages with deterministic tests.
+- Add fixtures and golden files for every non-trivial edge case.
+- Prefer append-only publication flows.
 
 ---
 
-## 1. Monorepo layout (recommended)
+## 1. Recommended architecture
 
-```
+Fontpub should be implemented as a **public-artifact-first append-only system**.
+
+### Authoritative public artifacts
+- `/v1/packages/{owner}/{repo}/versions/{version_key}.json` is the authoritative public record.
+
+### Derived public artifacts
+- `/v1/packages/{owner}/{repo}/index.json`
+- `/v1/packages/{owner}/{repo}.json`
+- `/v1/index.json`
+
+These are derived from the authoritative versioned package detail documents and must be reproducible.
+
+### Private state
+Private state exists only to protect publication:
+- `package_id -> sub` ownership binding
+- used `jti` values for replay prevention
+- transient publish coordination if needed
+
+Loss of private state must not invalidate already-published versioned package detail documents.
+
+### Runtime roles
+- **Update API**
+  - validates GitHub OIDC
+  - fetches manifest and assets at pinned GitHub Raw URLs
+  - computes SHA-256
+  - enforces validation, immutability, and resource limits
+  - publishes authoritative versioned package detail documents
+  - updates derived documents
+- **Rebuilder**
+  - scans published versioned package detail documents
+  - regenerates package versions indexes, latest aliases, and the root index
+  - is safe to run repeatedly
+- **CLI**
+  - reads public metadata
+  - downloads assets from pinned upstream URLs
+  - verifies asset hashes
+  - installs and activates fonts locally
+
+### Deployment shape
+- Serve public JSON from object storage plus CDN.
+- Run the Update API as a regional service, not as a read-path dependency.
+- Keep the Rebuilder independent from request handling so derived documents can be repaired out of band.
+
+---
+
+## 2. Recommended repository layout
+
+The repository should be organized around the protocol and the append-only publication model.
+
+```text
 .
 ├─ AGENTS.md
-├─ docs/                          # v1 spec (authoritative)
-├─ pnpm-workspace.yaml
-├─ package.json                   # workspace root
-├─ packages/
-│  ├─ indexer/                    # Cloudflare Workers (TypeScript)
-│  │  ├─ src/
-│  │  ├─ test/
-│  │  ├─ wrangler.toml
-│  │  └─ package.json
-│  ├─ schemas/                    # JSON Schema / validators / canonical normalization
-│  │  ├─ src/
-│  │  ├─ test/
-│  │  └─ package.json
-│  ├─ fixtures/                   # shared test fixtures (manifests, indexes, jwt samples)
-│  │  └─ ...
-│  └─ cli/                        # Go module (macOS CLI)
-│     ├─ cmd/fontpub/
-│     ├─ internal/
-│     ├─ testdata/
-│     └─ go.mod
+├─ README.md
+├─ docs/                            # authoritative protocol/spec docs
+├─ protocol/
+│  ├─ schemas/                      # JSON Schemas for public documents
+│  ├─ fixtures/                     # manifests, JWT claim sets, golden indexes, errors
+│  ├─ golden/                       # canonical JSON outputs for conformance tests
+│  └─ README.md
+├─ go/
+│  ├─ go.mod
+│  ├─ cmd/
+│  │  ├─ fontpub/                   # CLI
+│  │  ├─ update-api/                # POST /v1/update service
+│  │  └─ rebuild-indexes/           # derived-document rebuilder
+│  └─ internal/
+│     ├─ protocol/                  # versioning, canonical JSON, validation helpers
+│     ├─ oidc/                      # JWT claim validation
+│     ├─ githubraw/                 # pinned URL fetch logic
+│     ├─ publish/                   # immutable publication flow
+│     ├─ artifacts/                 # object-store access for public JSON
+│     ├─ state/                     # ownership and replay state abstractions
+│     └─ cli/                       # install, verify, activation, lockfile
 └─ tools/
-   └─ scripts/                    # release helpers, lint wrappers, etc.
+   └─ scripts/                      # release helpers, fixture generation, local checks
 ```
 
 Notes:
-- `packages/cli` is a Go module; it is not managed by pnpm. It lives in the monorepo for cohesion.
-- `packages/schemas` is published/consumed by `packages/indexer` to prevent drift between docs and implementation.
-
----
-
-## 2. Package management (pnpm)
-
-### Workspace configuration
-- Use a minimal workspace root:
-  - `pnpm-workspace.yaml` includes `packages/indexer`, `packages/schemas`, and optionally `tools/*`.
-- Keep Node dependencies pinned via lockfile (`pnpm-lock.yaml`).
-
-### TypeScript standards
-- Node packages are ESM unless there is a strong reason not to.
-- Use `vitest` for unit tests where possible.
+- Use one shared Go module so the CLI, Update API, and Rebuilder can share versioning, hashing, canonicalization, and protocol logic.
+- Keep `protocol/` language-neutral where possible. It should remain usable by other implementations.
+- If a website or docs app is added later, it should not own protocol logic.
 
 ---
 
 ## 3. Implementation order (TDD-first)
 
-Implement in this order to keep feedback loops tight:
+Implement in this order:
 
-### Phase A: Schemas & normalization (TDD)
-**Package:** `packages/schemas`
+### Phase A: Protocol assets and conformance
+**Directory:** `protocol/`
 
 Deliverables:
-- Version parsing & comparison:
-  - Numeric Dot parser
-  - Leading-zero rejection per segment
-  - Canonical formatting rules (do not rewrite the user’s string on wire; canonicalize for comparisons)
-- Manifest validation:
-  - All required fields
-  - `license === "OFL-1.1"` only
-  - `files[]` validation (path rules, style/weight ranges)
-- Index canonicalization:
-  - Sorting rules (`assets` sorted by `path` asc)
-  - Deterministic comparison utilities for immutability checks
+- JSON Schemas for:
+  - manifest
+  - root index
+  - package versions index
+  - versioned package detail
+  - lockfile
+  - error object
+- fixtures for:
+  - valid/invalid manifests
+  - valid/invalid OIDC claim sets
+  - valid/invalid version strings
+  - immutability comparisons
+- golden canonical JSON outputs
 
 Tests:
-- Table-driven tests for version compare edge cases.
-- JSON fixtures for valid/invalid manifest examples.
-- Golden tests for canonicalized asset lists.
+- fixture-driven schema validation
+- version key and ordering tests
+- canonical JSON serialization tests
 
 Acceptance:
-- `pnpm -C packages/schemas test` passes with >90% branch coverage on core modules.
+- Public documents and error objects can be validated without referring to implementation code.
 
-### Phase B: Indexer API core (TDD)
-**Package:** `packages/indexer`
+### Phase B: Shared Go protocol library
+**Directory:** `go/internal/protocol`
 
 Deliverables:
-- Public GET endpoints:
-  - `GET /v1/index.json`
-  - `GET /v1/packages/:owner/:repo.json`
-  - Must include `ETag` and support `If-None-Match` -> `304`
-- Update endpoint:
-  - `POST /v1/update`
-  - Validates GitHub OIDC per `docs/security-oidc.md`
-  - Fetches `fontpub.json` at **SHA-pinned** raw URL
-  - Fetches each asset at SHA-pinned raw URL
-  - Computes SHA-256 (streaming) and enforces file size limit
-  - Writes package detail JSON to R2
-  - Updates root index using conditional write / optimistic concurrency
-  - Enforces immutability (409 on mismatch)
+- Numeric Dot parsing and `version_key` normalization
+- manifest validation helpers
+- canonical JSON serializer
+- immutability comparison helpers
+- path validation helpers
 
 Tests:
-- Unit tests for:
-  - JWT claim validation logic (pure functions, no network)
-  - Manifest retrieval URL building (SHA pinned)
-  - Asset hashing pipeline (streamed hashing)
-  - Immutability comparator (via schemas package)
-- Integration-ish tests with mocked fetch:
-  - Simulate GitHub raw responses and failures
-  - Simulate R2 get/put semantics and ETag conflicts
-- Error contract tests:
-  - Verify HTTP status + `{ error: { code, message, details } }`
+- table-driven version tests
+- manifest/path validation tests
+- golden serialization tests
+- immutability comparison tests
 
 Acceptance:
-- All endpoints behave per `docs/indexer-api.md` and `docs/error-codes.md`.
-- 304 caching behavior verified by tests.
+- Shared protocol logic is implementation-agnostic and deterministic.
 
-### Phase C: CLI (Go) (TDD)
-**Package:** `packages/cli`
+### Phase C: Update API
+**Directory:** `go/cmd/update-api`
 
 Deliverables:
-- `fontpub list` (reads root index with ETag)
-- `fontpub install owner/repo` (fetches package detail, downloads assets, verifies sha256)
-- `fontpub activate owner/repo` (symlink into `~/Library/Fonts/from_fontpub/`)
-- `fontpub deactivate`, `uninstall`, `update`, `status`
-- Lockfile read/write with atomic updates
+- `POST /v1/update`
+- OIDC validation per `docs/security-oidc.md`
+- request validation per `docs/indexer-api.md`
+- ownership binding
+- `jti` replay protection
+- manifest and asset fetching at SHA-pinned URLs
+- SHA-256 calculation
+- publication of versioned package detail documents
+- update of derived documents
 
 Tests:
-- Unit tests for:
-  - lockfile parsing/formatting
-  - download verification
-  - symlink naming and collision avoidance
-- Integration tests using temp directories to simulate `~/.fontpub` and `~/Library/Fonts/from_fontpub/`
+- JWT claim validation tests
+- replay rejection tests
+- manifest and asset fetch tests with mocked upstream responses
+- immutability tests
+- error contract tests
+- consistency tests covering partial publication and retry repair
+
+Acceptance:
+- The Update API can publish immutable versioned package detail documents and recover derived documents after retry.
+
+### Phase D: Rebuilder
+**Directory:** `go/cmd/rebuild-indexes`
+
+Deliverables:
+- full rebuild from published versioned package detail documents
+- package-scoped rebuild
+- root index regeneration
+- latest alias regeneration
+
+Tests:
+- rebuild from golden published artifacts
+- idempotent rerun tests
+- latest-version precedence tests
+
+Acceptance:
+- Deleting derived documents and rerunning the rebuilder restores them exactly.
+
+### Phase E: CLI
+**Directory:** `go/cmd/fontpub`
+
+Deliverables:
+- `fontpub list`
+- `fontpub install`
+- `fontpub activate`
+- `fontpub deactivate`
+- `fontpub update`
+- `fontpub uninstall`
+- `fontpub status`
+- lockfile read/write and repair-safe local state handling
+
+Tests:
+- lockfile parsing/formatting
+- download verification
+- activation naming and collision handling
+- temp-directory integration tests for install/activate/deactivate/uninstall
 
 Acceptance:
 - CLI commands are deterministic and idempotent.
-- Corrupted installs must be detected and reported.
+- Corrupted installs are detected and reported.
 
 ---
 
-## 4. TDD rules (required)
+## 4. TDD rules
 
-### For Node/TS packages
-- Every new module should ship with:
-  - at least one “happy path” test
-  - at least one “invalid input” test
-  - at least one “edge case” test (fixture-based)
+### Shared protocol and Update API
+- Every new module must ship with:
+  - one happy-path test
+  - one invalid-input test
+  - one edge-case or fixture-driven test
 
-### For Go (CLI)
+### Go code
 - Prefer table-driven tests.
-- Use `t.TempDir()` for filesystem operations.
-- Avoid tests that mutate the real home directory.
+- Use `t.TempDir()` for filesystem tests.
+- Do not mutate the real home directory in tests.
 
-### Coverage / quality gates
-- Add a CI job that runs:
-  - Node: `pnpm -r test`
-  - Go: `go test ./...`
-- The agent should not “greenwash” by reducing assertions. Fail tests only when the spec changes.
+### Rebuilder
+- Golden tests are required.
+- Rebuild outputs must be compared byte-for-byte against canonical JSON fixtures.
+
+### Quality gates
+- Run `go test ./...` for the Go module.
+- Keep conformance tests for protocol fixtures separate from service tests.
+- Do not weaken assertions to make tests pass.
 
 ---
 
-## 5. Security acceptance criteria (Indexer)
+## 5. Security acceptance criteria
 
 ### OIDC
-- Accept only GitHub Actions OIDC:
-  - `iss` fixed to GitHub issuer
-  - `aud` must match `https://fontpub.org`
-  - `exp`, `iat` checks with clock skew
-  - required claims: `sub`, `repository`, `sha`, `ref` (+ recommended owner consistency)
-- Enforce release-tag-only updates:
-  - `ref` must match `refs/tags/v*` (v1 rule)
+- Accept only GitHub Actions OIDC tokens with:
+  - `iss = https://token.actions.githubusercontent.com`
+  - `aud` containing `https://fontpub.org`
+  - required claims exactly as specified in `docs/security-oidc.md`
+- Enforce:
+  - tag-only publication
+  - workflow-file restriction
+  - allowed event restriction
+  - `jti` replay prevention
 
-### Repository ownership
-- First update claims ownership: store `sub` for `owner/repo`.
-- Subsequent updates require exact `sub` match.
+### Ownership
+- First successful publication binds `package_id` to `sub`.
+- Subsequent publications require the same `sub`.
 
-### DoS and resource limits
-- Reject assets > 50MB with 413.
-- Limit concurrent asset fetch+hash within an update request.
+### Resource limits
+- Reject:
+  - manifests larger than 1 MiB
+  - manifests with more than 256 assets
+  - packages larger than 2 GiB total
+  - assets larger than 50 MiB
 
----
-
-## 6. Error handling contract (Indexer)
-
-All errors MUST use:
-
-```json
-{
-  "error": {
-    "code": "ENUM",
-    "message": "string",
-    "details": { }
-  }
-}
-```
-
-Status mapping MUST follow `docs/indexer-api.md` and `docs/error-codes.md`:
-- 401: missing/invalid token
-- 403: ownership/workflow/ref restriction failures
-- 409: immutability violation
-- 422: manifest validation
-- 429: rate limit
-- 502/503: upstream failures, include retry guidance where applicable
+### Publication safety
+- A version must not become discoverable before its authoritative versioned package detail document exists.
+- Retrying the same valid update must not alter the immutable versioned package detail document.
 
 ---
 
-## 7. Determinism requirements
+## 6. Determinism requirements
 
-- Indexer JSON outputs must be stable across runs given the same inputs.
-- Always sort `assets[]` by `path` ascending.
-- Use canonical JSON serialization (stable key order if possible) for immutability comparisons.
-
----
-
-## 8. “Do not guess” list
-
-If any of the following are unclear in implementation, DO NOT invent behavior. Add a failing test and update `docs/`:
-- Any on-wire JSON field name or type
-- Any error code
-- Any OIDC claim requirement
-- Any cache/ETag behavior
+- Public JSON outputs must be byte-stable for the same logical document.
+- Use canonical JSON serialization exactly as defined in `docs/indexes.md`.
+- Sort `assets[]` by `path`.
+- Sort `versions[]` by version precedence descending.
+- Rebuilder output must match Update API output byte-for-byte.
 
 ---
 
-## 9. Developer ergonomics (optional but recommended)
+## 7. “Do not guess” list
 
-- Provide `pnpm dev` for indexer local dev (wrangler).
-- Provide `pnpm test` at repo root.
-- Add `tools/scripts/` for release tasks (tagging, manifest validation preflight).
+If any of the following are unclear, do not invent behavior. Add or update a test and then update `docs/`:
+- any public JSON field name or type
+- any URL path
+- any error code
+- any OIDC claim requirement
+- any resource limit
+- any `ETag` behavior
+- any rule for authoritative vs derived artifacts
 
 ---
 
-## 10. Definition of Done
+## 8. Developer ergonomics
+
+- Provide a local command to run the Update API.
+- Provide a local command to run the Rebuilder against a development object store.
+- Provide a single command to run all protocol and Go tests.
+- Prefer fixture-driven local development over manual endpoint testing.
+
+---
+
+## 9. Definition of Done
 
 A feature is done only when:
-- Tests cover it (including failure modes).
-- Docs remain consistent (no schema drift).
-- The implementation matches the error contract and sorting/canonicalization rules.
+- tests cover success and failure modes
+- docs remain consistent with the implementation intent
+- authoritative and derived artifact behavior matches the protocol docs
+- rebuildability from published versioned package detail documents is preserved

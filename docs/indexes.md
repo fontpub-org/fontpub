@@ -37,6 +37,8 @@ Repository renames are out of scope for v1 package identity.
 ### Purpose
 Fast listing and update checks without downloading large metadata.
 
+This document is derived from published versioned package detail documents.
+
 ### Schema (conceptual)
 
 ```json
@@ -65,6 +67,8 @@ Notes:
 
 ### Purpose
 Discover every published immutable version for a package.
+
+This document is derived from published versioned package detail documents for the package.
 
 ### Schema (conceptual)
 
@@ -101,12 +105,16 @@ Requirements:
 - MUST return the same JSON document as the highest-precedence entry in the package versions index.
 - MUST be byte-identical to the corresponding versioned package detail response.
 
+This document is derived from the highest-precedence published versioned package detail document.
+
 ---
 
 ## Versioned package detail: `/v1/packages/{owner}/{repo}/versions/{version_key}.json`
 
 ### Purpose
 The canonical metadata a client uses to install and verify assets.
+
+This document is the authoritative public record for a published package version.
 
 ### Schema (conceptual)
 

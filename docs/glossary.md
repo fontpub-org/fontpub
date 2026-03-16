@@ -11,4 +11,6 @@
 - **Package versions index**: `/v1/packages/{owner}/{repo}/index.json`, the list of immutable published versions for a package.
 - **Latest package detail alias**: `/v1/packages/{owner}/{repo}.json`, the endpoint that returns the latest versioned package detail.
 - **Versioned package detail**: `/v1/packages/{owner}/{repo}/versions/{version_key}.json`, full immutable metadata for one package version.
+- **Authoritative artifact**: A published document whose contents are the canonical public record and are not derived from another public Fontpub document. In v1 this is the versioned package detail document.
+- **Derived document**: A published document regenerated from authoritative versioned package detail documents, such as the root index, package versions index, and latest package detail alias.
 - **Immutability**: Within a given package, a version key is immutable: if metadata, pinned source, or assets differ, the update must fail.
