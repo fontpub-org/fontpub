@@ -20,7 +20,7 @@ This document defines CLI behavior and on-disk layout.
   - Record in lockfile
 
 - `fontpub activate <owner>/<repo> [--version <v>]`
-  - Create symlinks into `~/Library/Fonts/from_fontpub/`
+  - Create symlinks into the activation target directory
 
 - `fontpub deactivate <owner>/<repo>`
   - Remove symlinks for that package
@@ -53,6 +53,10 @@ Activation is implemented by symlinks into installed package files.
 Symlink naming:
 - `{owner}--{repo}--{filename}`
 - where `filename` is the basename of the asset path.
+
+Activation safety rules:
+- The CLI MUST use the validated asset basename exactly as published in the package detail.
+- The CLI MUST NOT interpret asset basenames as path components, option flags, or shell fragments.
 
 If a symlink name would collide:
 - The CLI MUST make the name unique by appending `--<shortsha>` where `shortsha` is the first 8 chars of the asset SHA-256.

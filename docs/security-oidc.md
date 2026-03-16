@@ -30,6 +30,9 @@ The JWT MUST include:
 - `repository_owner` (string): MUST equal the owner segment of `repository`
 - `sha` (string): 40-hex commit SHA
 - `ref` (string): git ref that triggered the workflow
+- `job_workflow_ref` (string): identifies the workflow file that issued the token
+- `jti` (string): unique token identifier
+- `event_name` (string): workflow trigger event name
 
 If any required claim is missing, reject with `401 Unauthorized` and error code `AUTH_CLAIMS_MISSING`.
 
@@ -55,5 +58,12 @@ To minimize attack surface, v1 restricts updates to release tags.
 - `ref` MUST match: `refs/tags/<tag>`
 - `<tag>` MUST itself be a valid Numeric Dot version string, with the same optional leading `v` or `V` support described in `versioning.md`
 - The tag's version key MUST equal the manifest version key
+- `job_workflow_ref` MUST reference `.github/workflows/fontpub.yml` in the same repository named by `repository`
+- `event_name` MUST be either `push` or `workflow_dispatch`
 
 If a token fails policy restrictions, reject with `403 Forbidden` and error code `WORKFLOW_NOT_ALLOWED`.
+
+## Replay protection
+
+- The Indexer MUST reject reuse of the same `jti` while the corresponding token remains valid.
+- A reused token MUST be rejected with `401 Unauthorized` and error code `AUTH_REPLAY_DETECTED`.

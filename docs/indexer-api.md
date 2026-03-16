@@ -95,6 +95,9 @@ Request rules:
 - The Indexer validates that the tag name in `ref` is a valid Numeric Dot version string and that its version key equals the manifest version key.
 - The Indexer computes SHA-256 for each asset.
 - The Indexer MUST reject:
+  - `fontpub.json` larger than 1 MiB
+  - manifests declaring more than 256 asset entries
+  - packages whose total asset size exceeds 2 GiB
   - files > 50 MiB
   - non-allowed extensions (`.otf`, `.ttf`, `.woff2`)
   - invalid manifest schema
@@ -140,11 +143,12 @@ If the Indexer cannot complete an update because it cannot preserve these consis
 
 - `400 Bad Request` — malformed body, invalid body schema, or body/JWT mismatch
 - `401 Unauthorized` — missing/invalid JWT, signature failure
+- `401 Unauthorized` — replayed JWT
 - `403 Forbidden` — ownership mismatch or workflow restrictions
 - `404 Not Found` — manifest or assets not found at the pinned SHA
 - `409 Conflict` — immutability violation
-- `413 Payload Too Large` — asset > 50 MiB
-- `422 Unprocessable Entity` — manifest validation failure, unsupported asset format, or tag/version mismatch
+- `413 Payload Too Large` — manifest, package, or asset size limit exceeded
+- `422 Unprocessable Entity` — manifest validation failure, unsupported asset format, asset count limit exceeded, or tag/version mismatch
 - `429 Too Many Requests` — rate limited
 - `502 Bad Gateway` — upstream (GitHub Raw) fetch failure
 - `503 Service Unavailable` — contention after retries; includes `Retry-After`

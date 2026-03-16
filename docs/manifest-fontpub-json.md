@@ -4,6 +4,8 @@ Every Fontpub repository MUST include a `fontpub.json` file at repository root.
 
 All fields are **required** in v1.
 
+`fontpub.json` MUST be <= 1 MiB.
+
 License is restricted to **OFL-1.1**.
 
 ## Schema (conceptual)
@@ -44,6 +46,8 @@ Must be the literal string: `OFL-1.1`.
 ### `files[]` (required, non-empty)
 List of font files to distribute.
 
+- `files[]` MUST contain at most 256 entries.
+
 Each entry:
 
 - `path`:
@@ -52,6 +56,8 @@ Each entry:
   - MUST NOT contain empty segments
   - MUST NOT contain `.` or `..` segments
   - MUST NOT end with `/`
+  - Each path segment MUST NOT contain control characters, U+0000, or leading/trailing whitespace
+  - Each path segment MUST NOT contain `:`
 - `style`:
   - One of: `normal`, `italic`, `oblique`
 - `weight`:
@@ -62,6 +68,7 @@ Additional rules:
 - `files[]` MUST NOT contain duplicate `path` values.
 - For a given `path`, the tuple `(style, weight)` is metadata used by clients; it does not affect integrity checks beyond immutability rules.
 - When constructing GitHub Raw URLs, each path segment MUST be percent-encoded as needed, while `/` separators remain literal.
+- The total size of all assets referenced by a single manifest MUST be <= 2 GiB.
 
 ## Example
 
