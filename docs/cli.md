@@ -10,9 +10,10 @@ This document defines CLI behavior and on-disk layout, not the exact command-lin
   - Fetch `/v1/index.json` (use ETag)
   - Print packages and latest versions
 
-- `fontpub install <owner>/<repo>`
+- `fontpub install <owner>/<repo> [--version <v>]`
   - Fetch root index (optional, for existence/latest)
-  - Fetch package detail `/v1/packages/<owner>/<repo>.json`
+  - If `--version` is omitted, fetch package detail `/v1/packages/<owner>/<repo>.json`
+  - If `--version` is provided, normalize it to a version key and fetch `/v1/packages/<owner>/<repo>/versions/<version_key>.json`
   - Download each `asset.url`
   - Verify SHA-256 matches `asset.sha256`
   - Store files under `~/.fontpub/packages/...`
@@ -25,7 +26,7 @@ This document defines CLI behavior and on-disk layout, not the exact command-lin
   - Remove symlinks for that package
 
 - `fontpub update`
-  - For installed packages, compare installed version with root index latest
+  - For installed packages, compare installed `version_key` with the root index latest version key
   - Install newer versions and (optionally) re-activate if currently active
 
 - `fontpub uninstall <owner>/<repo> [--version <v>|--all]`
@@ -39,7 +40,7 @@ This document defines CLI behavior and on-disk layout, not the exact command-lin
 
 - Base directory: `~/.fontpub/`
 - Packages:
-  - `~/.fontpub/packages/<owner>/<repo>/<version>/...`
+  - `~/.fontpub/packages/<owner>/<repo>/<version_key>/...`
 - Lockfile:
   - `~/.fontpub/fontpub.lock`
 
@@ -73,6 +74,8 @@ The lockfile is JSON.
     "owner/repo": {
       "installed_versions": {
         "1.2.3": {
+          "version": "v1.2.3",
+          "version_key": "1.2.3",
           "installed_at": "RFC3339 timestamp",
           "assets": [
             {
@@ -85,7 +88,7 @@ The lockfile is JSON.
           ]
         }
       },
-      "active_version": "1.2.3"
+      "active_version_key": "1.2.3"
     }
   }
 }
@@ -93,6 +96,9 @@ The lockfile is JSON.
 
 Rules:
 - `packages` keys MUST be canonical package IDs (lowercase).
-- `active_version` MAY be null/omitted if not active.
+- `installed_versions` keys MUST be version keys.
+- Each installed version record MUST preserve both the literal `version` string and the canonical `version_key`.
+- `active_version_key` MAY be null/omitted if not active.
+- CLI flags or user inputs that name a version MUST accept any valid version string and normalize it to a version key before lookup.
 - `assets[].active` MUST reflect whether the symlink exists (or desired state if repairing).
 - CLI MUST update lockfile atomically (write temp file, fsync if feasible, rename).

@@ -18,7 +18,8 @@ A web service that:
 - Computes SHA-256 for each asset (without persisting binaries)
 - Publishes:
   - A lightweight root index listing packages and their latest versions
-  - Per-package detail documents listing all assets and their digests
+  - Per-package version indexes
+  - Immutable versioned package detail documents listing all assets and their digests
 
 ### 3) CLI (client)
 A tool (initially targeting macOS) that:
@@ -30,7 +31,7 @@ A tool (initially targeting macOS) that:
 - Integrity: every installed file is verified against the Indexer-published SHA-256
 - Reproducibility: every asset URL is pinned to an immutable Git commit SHA
 - Minimal central trust: the Indexer stores metadata, not binaries
-- Operational simplicity: “release by tag” for updates (recommended), cache-friendly reads via ETag
+- Operational simplicity: release-by-tag updates and cache-friendly reads via ETag
 
 ## Non-goals (v1)
 - Hosting/mirroring font binaries

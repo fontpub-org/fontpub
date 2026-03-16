@@ -35,6 +35,9 @@ Human-friendly author or organization name.
 ### `version` (required)
 Must follow the v1 Numeric Dot rules.
 
+- The manifest stores the package's literal version string.
+- The Indexer MUST derive the package's `version_key` from this string as defined in `versioning.md`.
+
 ### `license` (required)
 Must be the literal string: `OFL-1.1`.
 
@@ -46,8 +49,9 @@ Each entry:
 - `path`:
   - Repository-root-relative POSIX path (use `/` separators)
   - MUST NOT start with `/`
-  - MUST NOT contain `..` segments
-  - SHOULD NOT contain `.` segments
+  - MUST NOT contain empty segments
+  - MUST NOT contain `.` or `..` segments
+  - MUST NOT end with `/`
 - `style`:
   - One of: `normal`, `italic`, `oblique`
 - `weight`:
@@ -57,6 +61,7 @@ Each entry:
 Additional rules:
 - `files[]` MUST NOT contain duplicate `path` values.
 - For a given `path`, the tuple `(style, weight)` is metadata used by clients; it does not affect integrity checks beyond immutability rules.
+- When constructing GitHub Raw URLs, each path segment MUST be percent-encoded as needed, while `/` separators remain literal.
 
 ## Example
 

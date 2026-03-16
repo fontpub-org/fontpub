@@ -28,7 +28,7 @@ The JWT MUST include:
 
 - `sub` (string): used for ownership binding
 - `repository` (string): `owner/repo`
-- `repository_owner` (string)
+- `repository_owner` (string): MUST equal the owner segment of `repository`
 - `sha` (string): 40-hex commit SHA
 - `ref` (string): git ref that triggered the workflow
 
@@ -37,6 +37,7 @@ If any required claim is missing, reject with `401 Unauthorized` and error code 
 ## Normalization
 
 - The Indexer MUST normalize `repository` to lowercase for storage and comparisons.
+- The Indexer MUST compare `repository_owner` against the normalized owner segment of `repository`.
 
 ## Ownership binding
 
@@ -47,13 +48,15 @@ For subsequent updates:
 - Require the same `sub` for the same `package_id`.
 - If `sub` mismatches, reject with `403 Forbidden` and error code `OWNERSHIP_MISMATCH`.
 
-This supports repository renames (same subject) while preventing takeovers.
+This binding prevents takeovers within a stable `package_id`. Repository renames are handled as new package IDs in v1.
 
-## Workflow restrictions (recommended v1 policy)
+## Workflow restrictions
 
-To minimize attack surface, v1 RECOMMENDS restricting updates to release tags.
+To minimize attack surface, v1 restricts updates to release tags.
 
-- `ref` MUST match: `refs/tags/v*`
+- `ref` MUST match: `refs/tags/<tag>`
+- `<tag>` MUST itself be a valid Numeric Dot version string, with the same optional leading `v` or `V` support described in `versioning.md`
+- The tag's version key MUST equal the manifest version key
 
 Optional hardening (SHOULD if available in claims):
 - Restrict to a specific workflow file via `workflow_ref` or `job_workflow_ref`:

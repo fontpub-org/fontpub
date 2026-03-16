@@ -13,12 +13,20 @@ Implementations MAY add additional codes, but SHOULD keep these stable.
 - `WORKFLOW_NOT_ALLOWED` — token context not allowed by policy (e.g., not a tag ref)
 - `OWNERSHIP_MISMATCH` — `sub` does not match stored owner for package
 
+## Request / Lookup
+
+- `REQUEST_INVALID_JSON` — request body is not valid JSON
+- `REQUEST_SCHEMA_INVALID` — request body is missing required fields or contains unexpected fields
+- `PACKAGE_NOT_FOUND` — requested package does not exist
+- `VERSION_NOT_FOUND` — requested package version does not exist
+
 ## Validation
 
 - `MANIFEST_INVALID_JSON` — `fontpub.json` is not valid JSON
 - `MANIFEST_SCHEMA_INVALID` — missing/invalid required fields
 - `LICENSE_NOT_ALLOWED` — license is not `OFL-1.1`
 - `VERSION_INVALID` — version does not meet Numeric Dot rules
+- `TAG_VERSION_MISMATCH` — release tag version does not match the manifest version key
 - `ASSET_PATH_INVALID` — invalid path (absolute, contains `..`, etc.)
 - `ASSET_FORMAT_NOT_ALLOWED` — unsupported extension
 - `ASSET_TOO_LARGE` — single asset exceeds size limit
@@ -26,7 +34,7 @@ Implementations MAY add additional codes, but SHOULD keep these stable.
 
 ## Immutability / Conflicts
 
-- `IMMUTABLE_VERSION` — same version already exists but differs in immutable fields
+- `IMMUTABLE_VERSION` — same version key already exists but differs in immutable fields
 - `INDEX_CONFLICT` — root index write conflict after retries
 
 ## Upstream / Infrastructure
