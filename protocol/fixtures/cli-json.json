@@ -1,0 +1,99 @@
+{
+  "status": {
+    "valid": {
+      "schema_version": "1",
+      "ok": true,
+      "command": "status",
+      "data": {
+        "packages": {
+          "example/family": {
+            "installed_versions": ["1.2.3"],
+            "active_version_key": "1.2.3"
+          }
+        }
+      }
+    }
+  },
+  "verify_failure": {
+    "valid": {
+      "schema_version": "1",
+      "ok": false,
+      "command": "verify",
+      "error": {
+        "code": "LOCAL_FILE_MISSING",
+        "message": "verification failed",
+        "details": {
+          "packages": [
+            {
+              "package_id": "example/family",
+              "ok": false,
+              "findings": [
+                {
+                  "code": "LOCAL_FILE_MISSING",
+                  "severity": "error",
+                  "subject": "asset",
+                  "message": "missing asset",
+                  "details": {
+                    "path": "dist/ExampleSans-Regular.otf"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "package_init": {
+    "valid": {
+      "schema_version": "1",
+      "ok": true,
+      "command": "package init",
+      "data": {
+        "manifest": {
+          "name": "Example Sans",
+          "author": "Example Studio",
+          "version": "1.2.3",
+          "license": "OFL-1.1",
+          "files": [
+            { "path": "dist/ExampleSans-Regular.otf", "style": "normal", "weight": 400 }
+          ]
+        },
+        "inferences": [
+          { "field": "files[0].style", "value": "normal", "source": "embedded_metadata" }
+        ],
+        "unresolved_fields": []
+      }
+    }
+  },
+  "repair_failure": {
+    "valid": {
+      "schema_version": "1",
+      "ok": false,
+      "command": "repair",
+      "error": {
+        "code": "LOCAL_FILE_HASH_MISMATCH",
+        "message": "repair failed",
+        "details": {
+          "packages": [
+            {
+              "package_id": "example/family",
+              "ok": false,
+              "findings": [
+                {
+                  "code": "LOCAL_FILE_HASH_MISMATCH",
+                  "severity": "error",
+                  "subject": "asset",
+                  "message": "hash mismatch",
+                  "details": {
+                    "path": "dist/ExampleSans-Regular.otf"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

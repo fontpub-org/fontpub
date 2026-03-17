@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fontpub.org/schemas/v1/cli/verify-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ok", "command"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "ok": { "type": "boolean" },
+    "command": { "const": "verify" },
+    "data": { "type": "object" },
+    "error": { "type": "object" }
+  }
+}

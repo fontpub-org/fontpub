@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fontpub.org/schemas/v1/cli/status-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ok", "command", "data"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "ok": { "const": true },
+    "command": { "const": "status" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packages"],
+      "properties": {
+        "packages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["installed_versions", "active_version_key"],
+            "properties": {
+              "installed_versions": { "type": "array", "items": { "type": "string" } },
+              "active_version_key": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

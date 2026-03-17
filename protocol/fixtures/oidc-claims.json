@@ -1,0 +1,84 @@
+{
+  "valid": [
+    {
+      "name": "basic",
+      "claims": {
+        "sub": "repo:example/family:ref:refs/tags/v1.2.3",
+        "repository": "example/family",
+        "repository_id": "123456789",
+        "repository_owner": "example",
+        "sha": "0123456789abcdef0123456789abcdef01234567",
+        "ref": "refs/tags/v1.2.3",
+        "workflow_ref": "example/family/.github/workflows/fontpub.yml@refs/heads/main",
+        "workflow_sha": "89abcdef0123456789abcdef0123456789abcdef",
+        "jti": "jwt-id-1",
+        "event_name": "push"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "missing_repository_id",
+      "claims": {
+        "sub": "repo:example/family:ref:refs/tags/v1.2.3",
+        "repository": "example/family",
+        "repository_owner": "example",
+        "sha": "0123456789abcdef0123456789abcdef01234567",
+        "ref": "refs/tags/v1.2.3",
+        "workflow_ref": "example/family/.github/workflows/fontpub.yml@refs/heads/main",
+        "workflow_sha": "89abcdef0123456789abcdef0123456789abcdef",
+        "jti": "jwt-id-1",
+        "event_name": "push"
+      },
+      "error": "AUTH_CLAIMS_MISSING"
+    },
+    {
+      "name": "owner_mismatch",
+      "claims": {
+        "sub": "repo:example/family:ref:refs/tags/v1.2.3",
+        "repository": "example/family",
+        "repository_id": "123456789",
+        "repository_owner": "other",
+        "sha": "0123456789abcdef0123456789abcdef01234567",
+        "ref": "refs/tags/v1.2.3",
+        "workflow_ref": "example/family/.github/workflows/fontpub.yml@refs/heads/main",
+        "workflow_sha": "89abcdef0123456789abcdef0123456789abcdef",
+        "jti": "jwt-id-1",
+        "event_name": "push"
+      },
+      "error": "AUTH_CLAIMS_MISMATCH"
+    },
+    {
+      "name": "workflow_path_invalid",
+      "claims": {
+        "sub": "repo:example/family:ref:refs/tags/v1.2.3",
+        "repository": "example/family",
+        "repository_id": "123456789",
+        "repository_owner": "example",
+        "sha": "0123456789abcdef0123456789abcdef01234567",
+        "ref": "refs/tags/v1.2.3",
+        "workflow_ref": "example/family/.github/workflows/release.yml@refs/heads/main",
+        "workflow_sha": "89abcdef0123456789abcdef0123456789abcdef",
+        "jti": "jwt-id-1",
+        "event_name": "push"
+      },
+      "error": "WORKFLOW_NOT_ALLOWED"
+    },
+    {
+      "name": "event_invalid",
+      "claims": {
+        "sub": "repo:example/family:ref:refs/tags/v1.2.3",
+        "repository": "example/family",
+        "repository_id": "123456789",
+        "repository_owner": "example",
+        "sha": "0123456789abcdef0123456789abcdef01234567",
+        "ref": "refs/tags/v1.2.3",
+        "workflow_ref": "example/family/.github/workflows/fontpub.yml@refs/heads/main",
+        "workflow_sha": "89abcdef0123456789abcdef0123456789abcdef",
+        "jti": "jwt-id-1",
+        "event_name": "schedule"
+      },
+      "error": "WORKFLOW_NOT_ALLOWED"
+    }
+  ]
+}

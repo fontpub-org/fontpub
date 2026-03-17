@@ -1,0 +1,120 @@
+{
+  "cases": [
+    {
+      "name": "idempotent_same",
+      "equal": true,
+      "existing": {
+        "schema_version": "1",
+        "package_id": "example/family",
+        "display_name": "Example Sans",
+        "author": "Example Studio",
+        "license": "OFL-1.1",
+        "version": "1.2.3",
+        "version_key": "1.2.3",
+        "published_at": "2026-01-01T00:00:00Z",
+        "github": {
+          "owner": "example",
+          "repo": "family",
+          "sha": "0123456789abcdef0123456789abcdef01234567"
+        },
+        "manifest_url": "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+        "assets": [
+          {
+            "path": "dist/ExampleSans-Regular.otf",
+            "url": "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/dist/ExampleSans-Regular.otf",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "format": "otf",
+            "style": "normal",
+            "weight": 400,
+            "size_bytes": 1000
+          }
+        ]
+      },
+      "candidate": {
+        "schema_version": "1",
+        "package_id": "example/family",
+        "display_name": "Example Sans",
+        "author": "Example Studio",
+        "license": "OFL-1.1",
+        "version": "1.2.3",
+        "version_key": "1.2.3",
+        "published_at": "2026-01-02T00:00:00Z",
+        "github": {
+          "owner": "example",
+          "repo": "family",
+          "sha": "0123456789abcdef0123456789abcdef01234567"
+        },
+        "manifest_url": "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+        "assets": [
+          {
+            "path": "dist/ExampleSans-Regular.otf",
+            "url": "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/dist/ExampleSans-Regular.otf",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "format": "otf",
+            "style": "normal",
+            "weight": 400,
+            "size_bytes": 1000
+          }
+        ]
+      }
+    },
+    {
+      "name": "different_sha",
+      "equal": false,
+      "existing": {
+        "schema_version": "1",
+        "package_id": "example/family",
+        "display_name": "Example Sans",
+        "author": "Example Studio",
+        "license": "OFL-1.1",
+        "version": "1.2.3",
+        "version_key": "1.2.3",
+        "published_at": "2026-01-01T00:00:00Z",
+        "github": {
+          "owner": "example",
+          "repo": "family",
+          "sha": "0123456789abcdef0123456789abcdef01234567"
+        },
+        "manifest_url": "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+        "assets": [
+          {
+            "path": "dist/ExampleSans-Regular.otf",
+            "url": "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/dist/ExampleSans-Regular.otf",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "format": "otf",
+            "style": "normal",
+            "weight": 400,
+            "size_bytes": 1000
+          }
+        ]
+      },
+      "candidate": {
+        "schema_version": "1",
+        "package_id": "example/family",
+        "display_name": "Example Sans",
+        "author": "Example Studio",
+        "license": "OFL-1.1",
+        "version": "1.2.3",
+        "version_key": "1.2.3",
+        "published_at": "2026-01-02T00:00:00Z",
+        "github": {
+          "owner": "example",
+          "repo": "family",
+          "sha": "89abcdef0123456789abcdef0123456789abcdef"
+        },
+        "manifest_url": "https://raw.githubusercontent.com/example/family/89abcdef0123456789abcdef0123456789abcdef/fontpub.json",
+        "assets": [
+          {
+            "path": "dist/ExampleSans-Regular.otf",
+            "url": "https://raw.githubusercontent.com/example/family/89abcdef0123456789abcdef0123456789abcdef/dist/ExampleSans-Regular.otf",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "format": "otf",
+            "style": "normal",
+            "weight": 400,
+            "size_bytes": 1000
+          }
+        ]
+      }
+    }
+  ]
+}

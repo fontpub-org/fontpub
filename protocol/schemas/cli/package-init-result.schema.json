@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fontpub.org/schemas/v1/cli/package-init-result.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ok", "command", "data"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "ok": { "const": true },
+    "command": { "const": "package init" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "inferences", "unresolved_fields"],
+      "properties": {
+        "manifest": { "type": "object" },
+        "inferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "value", "source"],
+            "properties": {
+              "field": { "type": "string" },
+              "value": {},
+              "source": { "enum": ["embedded_metadata", "filename_heuristic", "user_input"] }
+            }
+          }
+        },
+        "unresolved_fields": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

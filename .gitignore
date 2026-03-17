@@ -41,4 +41,4 @@ npm-debug.log*
 # Go
 cli/fontpub
 .gomodcache
-
+.gocache
