@@ -102,3 +102,29 @@ func (c *MetadataClient) getJSON(ctx context.Context, path string, dest any) err
 	}
 	return nil
 }
+
+func (c *MetadataClient) Download(ctx context.Context, rawURL string) ([]byte, error) {
+	if c.HTTPClient == nil {
+		c.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, &CLIError{Code: "INTERNAL_ERROR", Message: "could not create request", Details: map[string]any{"url": rawURL}}
+	}
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, &CLIError{Code: "INTERNAL_ERROR", Message: "download failed", Details: map[string]any{"url": rawURL, "reason": err.Error()}}
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &CLIError{Code: "INTERNAL_ERROR", Message: "could not read download", Details: map[string]any{"url": rawURL}}
+	}
+	if resp.StatusCode >= 400 {
+		return nil, &CLIError{Code: "INTERNAL_ERROR", Message: fmt.Sprintf("download failed with status %d", resp.StatusCode), Details: map[string]any{"url": rawURL, "status": resp.StatusCode}}
+	}
+	return body, nil
+}

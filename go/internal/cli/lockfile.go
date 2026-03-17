@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -34,6 +35,42 @@ func (s LockfileStore) Load() (protocol.Lockfile, bool, error) {
 		return protocol.Lockfile{}, false, err
 	}
 	return lock, true, nil
+}
+
+func (s LockfileStore) Save(lock protocol.Lockfile) error {
+	if err := ValidateLockfile(lock); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil {
+		return err
+	}
+	body, err := protocol.MarshalCanonical(lock)
+	if err != nil {
+		return &CLIError{
+			Code:    "INTERNAL_ERROR",
+			Message: "could not serialize lockfile",
+			Details: map[string]any{"path": s.Path},
+		}
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(s.Path), ".fontpub-lock-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(body); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, s.Path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func ValidateLockfile(lock protocol.Lockfile) error {
