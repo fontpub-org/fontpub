@@ -63,7 +63,7 @@ These are derived from the authoritative versioned package detail documents and 
 
 ### Private state
 Private state exists only to protect publication:
-- `package_id -> sub` ownership binding
+- `package_id -> repository_id` ownership binding
 - used `jti` values for replay prevention
 - transient publish coordination if needed
 
@@ -287,8 +287,8 @@ Acceptance:
   - `jti` replay prevention
 
 ### Ownership
-- First successful publication binds `package_id` to `sub`.
-- Subsequent publications require the same `sub`.
+- First successful publication binds `package_id` to `repository_id`.
+- Subsequent publications require the same `repository_id`.
 
 ### Resource limits
 - Reject:

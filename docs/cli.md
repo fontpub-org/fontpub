@@ -68,7 +68,7 @@ The CLI has two top-level command groups:
 - MUST support `--dry-run`
 - MUST support `--json`
 
-### `fontpub activate <owner>/<repo> [--version <v>]`
+### `fontpub activate <owner>/<repo> [--version <v>] [--activation-dir <path>]`
 
 - Activate the selected installed version by creating symlinks in the activation target directory
 - If `--version` is omitted:
@@ -78,7 +78,7 @@ The CLI has two top-level command groups:
 - MUST support `--dry-run`
 - MUST support `--json`
 
-### `fontpub deactivate <owner>/<repo>`
+### `fontpub deactivate <owner>/<repo> [--activation-dir <path>]`
 
 - Remove activation symlinks for the package's active version
 - MUST support `--dry-run`
@@ -97,7 +97,7 @@ The CLI has two top-level command groups:
 - MUST support `--dry-run`
 - MUST support `--json`
 
-### `fontpub uninstall <owner>/<repo> [--version <v> | --all]`
+### `fontpub uninstall <owner>/<repo> [--version <v> | --all] [--activation-dir <path>]`
 
 - Remove installed files and lockfile entries
 - If the target version is active, deactivate it first
@@ -108,13 +108,13 @@ The CLI has two top-level command groups:
 - MUST support `--yes`
 - MUST support `--json`
 
-### `fontpub status [<owner>/<repo>]`
+### `fontpub status [<owner>/<repo>] [--activation-dir <path>]`
 
 - Show installed packages, installed versions, active version, and activation state
 - If a package is specified, limit output to that package
 - MUST support `--json`
 
-### `fontpub verify [<owner>/<repo>]`
+### `fontpub verify [<owner>/<repo>] [--activation-dir <path>]`
 
 - Verify local installation state against the lockfile
 - Verify that installed asset files exist and match recorded SHA-256 values
@@ -122,7 +122,7 @@ The CLI has two top-level command groups:
 - If a package is specified, limit verification to that package
 - MUST support `--json`
 
-### `fontpub repair [<owner>/<repo>]`
+### `fontpub repair [<owner>/<repo>] [--activation-dir <path>]`
 
 - Repair local state without changing the selected remote package version
 - Repair means reconciling:
@@ -160,9 +160,10 @@ The CLI has two top-level command groups:
 
 ### `fontpub package preview [PATH]`
 
-- Render a candidate package detail object derived from the current repository state
+- Render a candidate package detail object as defined in `candidate-package-detail.md`
+- Preview is derived from the current local repository state rooted at `PATH`
+- The selected repository root MUST have enough local Git metadata to determine the canonical GitHub `owner/repo`; otherwise the command MUST fail
 - MUST NOT publish anything
-- `published_at` MUST be omitted or `null`
 - preview output MUST NOT be treated as byte-identical to a published versioned package detail document
 - MUST support `--json`
 
@@ -213,7 +214,9 @@ When `--json` is set:
 
 ## Activation directory
 
-- Activation target directory is platform-defined.
+- Commands that read or modify activation state (`activate`, `deactivate`, `status`, `verify`, `repair`, `uninstall`) MUST support `--activation-dir <path>`.
+- When `--activation-dir` is provided, activation behavior is defined entirely against that directory.
+- Implementations MAY provide a platform default activation directory when `--activation-dir` is omitted.
 
 Activation is implemented by symlinks into installed package files.
 
@@ -224,6 +227,7 @@ Symlink naming:
 Activation safety rules:
 - The CLI MUST use the validated asset basename exactly as published in the package detail.
 - The CLI MUST NOT interpret asset basenames as path components, option flags, or shell fragments.
+- `status`, `verify`, and `repair` MUST evaluate activation state against the effective activation directory selected by `--activation-dir` or the implementation default.
 
 If a symlink name would collide:
 - The CLI MUST make the name unique by appending `--<shortsha>` where `shortsha` is the first 8 chars of the asset SHA-256.

@@ -133,11 +133,34 @@ If the Indexer cannot complete an update because it cannot preserve these consis
   "version": "1.2.3",
   "version_key": "1.2.3",
   "github_sha": "40-hex",
-  "index_etag": "string",
-  "package_etag": "string",
-  "package_version_etag": "string"
+  "artifacts": {
+    "versioned_package_detail": {
+      "path": "/v1/packages/owner/repo/versions/1.2.3.json",
+      "etag": "string"
+    },
+    "package_versions_index": {
+      "path": "/v1/packages/owner/repo/index.json",
+      "etag": "string"
+    },
+    "latest_package_alias": {
+      "path": "/v1/packages/owner/repo.json",
+      "updated": true,
+      "etag": "string"
+    },
+    "root_index": {
+      "path": "/v1/index.json",
+      "etag": "string"
+    }
+  }
 }
 ```
+
+Success response rules:
+- `artifacts.versioned_package_detail` MUST describe the authoritative document for the published version.
+- `artifacts.package_versions_index` MUST describe the package versions index after the update.
+- `artifacts.root_index` MUST describe the root index after the update.
+- `artifacts.latest_package_alias.updated` MUST be `true` if the published version became the package latest version, otherwise `false`.
+- If `artifacts.latest_package_alias.updated` is `false`, its `etag` MAY be omitted.
 
 ### Error responses
 

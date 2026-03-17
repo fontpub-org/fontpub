@@ -82,7 +82,7 @@ It is required because:
 Private state must be minimal and must not be the authoritative source of package metadata.
 
 Private state is limited to:
-- ownership binding: `package_id -> sub`
+- ownership binding: `package_id -> repository_id`
 - replay prevention for JWT `jti`
 - transient publication coordination if needed
 

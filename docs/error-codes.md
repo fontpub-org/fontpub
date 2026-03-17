@@ -19,7 +19,7 @@ Only the codes in this document are valid in v1.
 - `AUTH_CLAIMS_MISSING` — required claims missing
 - `AUTH_CLAIMS_MISMATCH` — request body does not match JWT claims
 - `WORKFLOW_NOT_ALLOWED` — token context not allowed by policy (e.g., not a tag ref)
-- `OWNERSHIP_MISMATCH` — `sub` does not match stored owner for package
+- `OWNERSHIP_MISMATCH` — `repository_id` does not match the stored owner for package
 
 ## Request / Lookup
 

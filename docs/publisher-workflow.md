@@ -20,23 +20,33 @@ If triggered by `push`, it MUST be restricted to release tags compatible with Fo
 
 The workflow MUST be able to request a GitHub Actions OIDC token suitable for calling `POST /v1/update`.
 
+At minimum, the workflow MUST grant:
+- `id-token: write`
+- `contents: read`
+
 ## Publication behavior
 
 The workflow MUST:
 1. determine the repository name
-2. determine the triggering commit SHA
-3. determine the triggering ref
-4. request an OIDC token whose audience is `https://fontpub.org`
-5. call `POST /v1/update` with:
+2. determine the repository ID from the GitHub Actions context
+3. determine the triggering commit SHA
+4. determine the triggering ref
+5. request an OIDC token whose audience is `https://fontpub.org`
+6. call `POST /v1/update` with:
    - `repository`
    - `sha`
    - `ref`
+
+Additional requirements:
+- The workflow MUST be a repository workflow located at `.github/workflows/fontpub.yml`, not a reusable workflow imported from another repository.
+- If triggered by `workflow_dispatch`, the workflow MUST still publish a tag ref and the submitted `sha` MUST be the commit pointed to by that tag.
 
 ## Generated workflow expectations
 
 `fontpub workflow init` MUST generate a workflow that:
 - uses the required path `.github/workflows/fontpub.yml`
 - is compatible with the claim requirements in `security-oidc.md`
+- requests `id-token: write` and `contents: read`
 - sends the exact request body required by `indexer-api.md`
 
 ## Non-goals

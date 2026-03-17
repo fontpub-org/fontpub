@@ -9,15 +9,18 @@ It applies whenever a command is invoked with `--json`.
 - Stdout MUST contain exactly one JSON object.
 - Human-readable tables, prompts, progress bars, and prose MUST NOT be mixed into stdout.
 - The top-level object MUST contain:
+  - `schema_version`
   - `ok`
   - `command`
 - On success, the top-level object MUST contain `data`.
 - On failure, the top-level object MUST contain `error`.
+- `schema_version` MUST equal `"1"`.
 
 ## Success shape
 
 ```json
 {
+  "schema_version": "1",
   "ok": true,
   "command": "string",
   "data": {}
@@ -28,6 +31,7 @@ It applies whenever a command is invoked with `--json`.
 
 ```json
 {
+  "schema_version": "1",
   "ok": false,
   "command": "string",
   "error": {
@@ -44,6 +48,7 @@ It applies whenever a command is invoked with `--json`.
 
 ```json
 {
+  "schema_version": "1",
   "ok": true,
   "command": "list",
   "data": {
@@ -67,6 +72,7 @@ It applies whenever a command is invoked with `--json`.
 
 ```json
 {
+  "schema_version": "1",
   "ok": true,
   "command": "status",
   "data": {
@@ -84,6 +90,7 @@ It applies whenever a command is invoked with `--json`.
 
 ```json
 {
+  "schema_version": "1",
   "ok": true,
   "command": "verify",
   "data": {
@@ -98,7 +105,7 @@ It applies whenever a command is invoked with `--json`.
 }
 ```
 
-Each finding object SHOULD include:
+Each finding object MUST contain:
 - `code`
 - `message`
 - `details`
@@ -113,6 +120,7 @@ Example:
 
 ```json
 {
+  "schema_version": "1",
   "ok": true,
   "command": "install",
   "data": {
@@ -135,6 +143,7 @@ Example:
 
 ```json
 {
+  "schema_version": "1",
   "ok": true,
   "command": "package init",
   "data": {
@@ -151,13 +160,15 @@ Example:
 
 ### `fontpub package preview --json`
 
-`data` MUST contain a candidate package detail object.
+`data` MUST contain a candidate package detail object as defined in `candidate-package-detail.md`.
 
 Because no publication has occurred yet:
-- `published_at` MUST be omitted or `null`
+- `published_at` MUST be omitted
 - preview output MUST NOT be described as byte-identical to a published package detail document
 
 ## Stability requirements
 
 - Field names defined in this document are part of the CLI's machine-readable contract.
-- Commands MAY include additional fields in `data` or `details` only if they do not change the meaning of existing fields.
+- Implementations MUST NOT add undocumented top-level fields.
+- Implementations MUST NOT add undocumented fields to command-specific objects defined in this document or in `candidate-package-detail.md`.
+- Future incompatible changes require a new CLI JSON schema version.
