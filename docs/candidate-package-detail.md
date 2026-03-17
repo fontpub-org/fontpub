@@ -19,7 +19,24 @@ A candidate package detail:
 
 It MUST NOT require a Git tag, a published update, or network access.
 
-The selected repository root MUST be a GitHub repository whose canonical `owner/repo` package identity can be derived from local Git metadata. If package identity cannot be derived, `fontpub package preview` MUST fail with CLI error code `INPUT_REQUIRED`.
+If `--package-id <owner>/<repo>` is provided, the CLI MUST:
+- validate that it is a canonical package ID after lowercase normalization
+- use that value as `package_id`
+
+If `--package-id` is omitted, the CLI MUST derive `package_id` from local Git metadata using this algorithm:
+1. Enumerate Git remotes for the selected repository root.
+2. Convert any remote URL that clearly identifies `github.com/<owner>/<repo>` to the canonical lowercase package ID `owner/repo`.
+3. Ignore remotes that do not map to public GitHub repository URLs.
+4. If exactly one distinct canonical package ID remains, use it.
+5. If zero canonical package IDs remain, fail with CLI error code `PACKAGE_ID_REQUIRED`.
+6. If more than one distinct canonical package ID remains, fail with CLI error code `PACKAGE_ID_AMBIGUOUS`.
+
+Recognized GitHub remote URL forms are:
+- `https://github.com/<owner>/<repo>`
+- `https://github.com/<owner>/<repo>.git`
+- `git@github.com:<owner>/<repo>.git`
+
+No other hostnames are recognized for v1 package identity derivation.
 
 ## Relationship to published package detail
 
@@ -60,7 +77,9 @@ It differs in two important ways:
 ## Requirements
 
 - `schema_version` MUST equal `"1"`.
-- `package_id` MUST be derived from the current repository's canonical GitHub `owner/repo` identity.
+- `package_id` MUST be either:
+  - the validated explicit `--package-id` value, or
+  - the canonical GitHub `owner/repo` identity derived from local Git metadata
 - `version_key` MUST be derived from `version` using `versioning.md`.
 - `assets[]` MUST include exactly the files declared in the manifest.
 - `assets[]` MUST be sorted by `path` ascending.

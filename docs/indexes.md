@@ -155,7 +155,7 @@ This document is the authoritative public record for a published package version
 - `format` MUST be derived from file extension.
 - `version_key` MUST be derived from `version` using `versioning.md`.
 - `published_at` is when this immutable version was first published and MUST NOT change on idempotent replays.
-- `size_bytes` SHOULD be included; if unknown, MAY be omitted.
+- `size_bytes` MUST be included.
 
 ### Ordering
 - Producers MUST sort `assets` by `path` ascending.

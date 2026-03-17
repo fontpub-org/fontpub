@@ -65,9 +65,12 @@ To minimize attack surface, v1 restricts updates to release tags.
 - `ref` MUST match: `refs/tags/<tag>`
 - `<tag>` MUST itself be a valid Numeric Dot version string, with the same optional leading `v` or `V` support described in `versioning.md`
 - The tag's version key MUST equal the manifest version key
-- `workflow_ref` MUST reference `.github/workflows/fontpub.yml` in the same repository named by `repository`
-- `workflow_sha` MUST be present
+- `workflow_ref` MUST match the form `<owner>/<repo>/.github/workflows/fontpub.yml@<git-ref>`
+- the `<owner>/<repo>` prefix in `workflow_ref` MUST equal the normalized `repository` claim
+- `workflow_sha` MUST be a 40-hex commit SHA
 - `event_name` MUST be either `push` or `workflow_dispatch`
+
+For v1, the Indexer validates only the repository/path portion of `workflow_ref` and the syntax of `workflow_sha`. It does not resolve `workflow_ref` or fetch the workflow file as part of token validation.
 
 If a token fails policy restrictions, reject with `403 Forbidden` and error code `WORKFLOW_NOT_ALLOWED`.
 

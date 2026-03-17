@@ -55,7 +55,7 @@ The CLI has two top-level command groups:
 - Show package metadata and assets
 - MUST support `--json`
 
-### `fontpub install <owner>/<repo> [--version <v>] [--activate]`
+### `fontpub install <owner>/<repo> [--version <v>] [--activate] [--activation-dir <path>]`
 
 - Fetch the root index
 - If `--version` is omitted, fetch `/v1/packages/<owner>/<repo>.json`
@@ -64,7 +64,7 @@ The CLI has two top-level command groups:
 - Verify SHA-256 matches `asset.sha256`
 - Store files under `~/.fontpub/packages/...`
 - Record the installation in the lockfile
-- If `--activate` is set, activate the installed version after a successful install
+- If `--activate` is set, activate the installed version after a successful install using the effective activation directory
 - MUST support `--dry-run`
 - MUST support `--json`
 
@@ -84,7 +84,7 @@ The CLI has two top-level command groups:
 - MUST support `--dry-run`
 - MUST support `--json`
 
-### `fontpub update [<owner>/<repo>] [--activate]`
+### `fontpub update [<owner>/<repo>] [--activate] [--activation-dir <path>]`
 
 - If no package is specified:
   - examine all installed packages
@@ -92,7 +92,7 @@ The CLI has two top-level command groups:
   - examine only that package
 - Compare installed `version_key` values with the root index latest version key
 - Install newer versions when available
-- If `--activate` is set, activate the newly installed version
+- If `--activate` is set, activate the newly installed version using the effective activation directory
 - If `--activate` is not set, preserve current activation state
 - MUST support `--dry-run`
 - MUST support `--json`
@@ -158,11 +158,12 @@ The CLI has two top-level command groups:
 - Verify path, version, license, and file-entry constraints
 - MUST support `--json`
 
-### `fontpub package preview [PATH]`
+### `fontpub package preview [PATH] [--package-id <owner>/<repo>]`
 
 - Render a candidate package detail object as defined in `candidate-package-detail.md`
 - Preview is derived from the current local repository state rooted at `PATH`
-- The selected repository root MUST have enough local Git metadata to determine the canonical GitHub `owner/repo`; otherwise the command MUST fail
+- If `--package-id` is provided, the CLI MUST use it as the package identity after validation and normalization
+- If `--package-id` is omitted, the CLI MUST derive the canonical GitHub `owner/repo` identity from local Git metadata using the rules in `candidate-package-detail.md`
 - MUST NOT publish anything
 - preview output MUST NOT be treated as byte-identical to a published versioned package detail document
 - MUST support `--json`
@@ -215,8 +216,13 @@ When `--json` is set:
 ## Activation directory
 
 - Commands that read or modify activation state (`activate`, `deactivate`, `status`, `verify`, `repair`, `uninstall`) MUST support `--activation-dir <path>`.
+- Commands that can immediately activate as part of another operation (`install --activate`, `update --activate`) MUST also support `--activation-dir <path>`.
 - When `--activation-dir` is provided, activation behavior is defined entirely against that directory.
 - Implementations MAY provide a platform default activation directory when `--activation-dir` is omitted.
+
+The effective activation directory is:
+1. the path passed to `--activation-dir`, if provided
+2. otherwise the implementation default activation directory
 
 Activation is implemented by symlinks into installed package files.
 

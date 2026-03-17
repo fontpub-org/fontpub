@@ -65,3 +65,5 @@ Only the codes in this document are valid in v1.
 - `ACTIVATION_BROKEN` — activation symlink state does not match the lockfile or expected target
 - `NOT_INSTALLED` — the requested package or version is not installed locally
 - `MULTIPLE_VERSIONS_INSTALLED` — an operation required an explicit version because multiple installed versions matched
+- `PACKAGE_ID_REQUIRED` — the CLI could not derive a canonical GitHub package ID and requires `--package-id`
+- `PACKAGE_ID_AMBIGUOUS` — the CLI found multiple distinct GitHub package IDs and requires `--package-id`

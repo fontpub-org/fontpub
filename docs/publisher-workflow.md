@@ -16,6 +16,8 @@ The workflow MUST support at least one of:
 
 If triggered by `push`, it MUST be restricted to release tags compatible with Fontpub versioning.
 
+If triggered by `workflow_dispatch`, the workflow MUST define a required string input named `tag`.
+
 ## Permissions
 
 The workflow MUST be able to request a GitHub Actions OIDC token suitable for calling `POST /v1/update`.
@@ -39,7 +41,9 @@ The workflow MUST:
 
 Additional requirements:
 - The workflow MUST be a repository workflow located at `.github/workflows/fontpub.yml`, not a reusable workflow imported from another repository.
-- If triggered by `workflow_dispatch`, the workflow MUST still publish a tag ref and the submitted `sha` MUST be the commit pointed to by that tag.
+- If triggered by `workflow_dispatch`, the workflow MUST construct `ref` as `refs/tags/<tag>` using the required `tag` input.
+- If triggered by `workflow_dispatch`, the workflow MUST resolve `sha` to the commit pointed to by that exact tag ref.
+- If triggered by `workflow_dispatch`, the workflow MUST fail before calling `POST /v1/update` if the tag input is missing, malformed, or not found.
 
 ## Generated workflow expectations
 

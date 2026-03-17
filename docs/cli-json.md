@@ -66,7 +66,7 @@ It applies whenever a command is invoked with `--json`.
 
 ### `fontpub show --json`
 
-`data` MUST be the fetched package detail document.
+`data` MUST be the fetched package detail document defined in `indexes.md`.
 
 ### `fontpub status --json`
 
@@ -112,7 +112,7 @@ Each finding object MUST contain:
 
 ### Mutating commands with `--dry-run --json`
 
-For mutating commands, `data` SHOULD include:
+For mutating commands, `data` MUST include:
 - `changed`: boolean
 - `planned_actions`: array
 
