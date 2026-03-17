@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ma/fontpub/go/internal/indexer/githubraw"
-	"github.com/ma/fontpub/go/internal/indexer/state"
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/githubraw"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/state"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 const (

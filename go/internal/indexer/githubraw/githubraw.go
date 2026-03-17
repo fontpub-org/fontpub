@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 var (

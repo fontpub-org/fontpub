@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 type Provider interface {

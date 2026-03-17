@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 var ErrWriteConflict = errors.New("artifact write conflict")

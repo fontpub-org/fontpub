@@ -6,9 +6,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ma/fontpub/go/internal/indexer/githubraw"
-	"github.com/ma/fontpub/go/internal/indexer/state"
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/githubraw"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/state"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 type fakeFetcher struct {

@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/ma/fontpub/go/internal/indexer/artifacts"
-	"github.com/ma/fontpub/go/internal/indexer/rebuilder"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/rebuilder"
 )
 
 func main() {

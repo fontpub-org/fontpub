@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/ma/fontpub/go/internal/indexer/artifacts"
-	"github.com/ma/fontpub/go/internal/indexer/githubraw"
-	"github.com/ma/fontpub/go/internal/indexer/oidc"
-	"github.com/ma/fontpub/go/internal/indexer/state"
-	"github.com/ma/fontpub/go/internal/indexer/updateapi"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/githubraw"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/oidc"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/state"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/updateapi"
 )
 
 func main() {

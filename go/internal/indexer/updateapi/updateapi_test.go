@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 type fakeVerifier struct {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ma/fontpub/go/internal/indexer/derive"
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/derive"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 func TestFileStoreRoundTrip(t *testing.T) {

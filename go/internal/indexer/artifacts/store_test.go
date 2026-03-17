@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 func TestMemoryStoreVersionedAndDocuments(t *testing.T) {

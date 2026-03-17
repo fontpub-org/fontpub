@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 func ComputeETag(body []byte) string {

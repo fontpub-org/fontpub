@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ma/fontpub/go/internal/indexer/httpx"
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/httpx"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 var sha40Pattern = regexp.MustCompile(`^[0-9a-f]{40}$`)

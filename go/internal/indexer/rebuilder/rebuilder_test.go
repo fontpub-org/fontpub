@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ma/fontpub/go/internal/indexer/artifacts"
-	"github.com/ma/fontpub/go/internal/indexer/derive"
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/derive"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 func TestRebuildAllMatchesGolden(t *testing.T) {

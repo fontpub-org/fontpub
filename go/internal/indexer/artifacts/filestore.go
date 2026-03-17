@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ma/fontpub/go/internal/indexer/derive"
-	"github.com/ma/fontpub/go/internal/protocol"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/derive"
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 type FileStore struct {
