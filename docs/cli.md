@@ -131,6 +131,12 @@ The CLI has two top-level command groups:
   - `assets[].active` flags
 - `repair` MUST NOT silently install a different version from the network
 - `repair` MUST be local-only and MUST NOT fetch package metadata or asset bytes from the network
+- `repair` MAY recreate missing activation symlinks when the installed file exists and the lockfile identifies the expected target
+- `repair` MAY remove stale or incorrect activation symlinks
+- `repair` MAY clear incorrect `assets[].active` flags and `active_version_key`
+- `repair` MUST NOT delete installed asset files
+- `repair` MUST NOT modify recorded asset hashes
+- If a required installed asset file is missing or its bytes do not match the recorded hash, `repair` MUST report the package as unrepaired and exit with failure
 - If a package is specified, limit repair to that package
 - MUST support `--dry-run`
 - MUST support `--yes`
@@ -174,13 +180,13 @@ The CLI has two top-level command groups:
 - MAY include family name, style, weight, and format inference
 - MUST support `--json`
 
-### `fontpub package check`
+### `fontpub package check [--tag <tag>]`
 
 - Validate that the current repository is ready for publication
 - This includes:
   - manifest validity
   - file existence
-  - tag/version consistency if a release tag was provided
+  - tag/version consistency if `--tag <tag>` was provided
 - MUST support `--json`
 
 ### `fontpub workflow init`
@@ -282,5 +288,5 @@ Rules:
 - If `active_version_key` is present, it MUST reference an installed version key for that package.
 - If `active_version_key` is present, at least one asset in that installed version MUST have `active: true`.
 - CLI flags or user inputs that name a version MUST accept any valid version string and normalize it to a version key before lookup.
-- `assets[].active` MUST reflect whether the symlink exists.
+- `assets[].active` MUST be `true` if and only if the expected activation symlink exists and points to the expected `local_path`.
 - CLI MUST update the lockfile atomically.

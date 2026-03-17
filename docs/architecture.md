@@ -135,6 +135,8 @@ using only:
 
 No unpublished database rows should be required to reconstruct public metadata.
 
+For derived documents that include timestamps such as `generated_at`, the value must itself be derivable from authoritative published artifacts under the protocol rules.
+
 ## Technology recommendations
 
 These are recommendations, not protocol requirements:

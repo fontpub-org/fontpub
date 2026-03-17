@@ -60,6 +60,7 @@ Notes:
 - `latest_version` is the literal version string from the latest package detail document.
 - `latest_version_key` is derived from `latest_version` per `versioning.md`.
 - `latest_published_at` is when the current latest version was first published.
+- `generated_at` MUST equal the maximum `published_at` value among the versioned package detail documents represented in the root index.
 
 ---
 
@@ -93,6 +94,7 @@ Notes:
 - `versions[]` contains one entry per immutable `version_key`.
 - `version` preserves the manifest's literal version string.
 - `url` is the canonical versioned package detail path for that entry.
+- `latest_version` and `latest_version_key` MUST match the first entry in `versions[]`.
 
 ---
 

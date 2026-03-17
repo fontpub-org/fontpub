@@ -110,6 +110,8 @@ Each finding object MUST contain:
 - `message`
 - `details`
 
+If any package has one or more findings, the command MUST return a failure result (`ok: false`) even though package-level findings remain machine-readable in `error.details`.
+
 ### Mutating commands with `--dry-run --json`
 
 For mutating commands, `data` MUST include:
@@ -165,6 +167,16 @@ Example:
 Because no publication has occurred yet:
 - `published_at` MUST be omitted
 - preview output MUST NOT be described as byte-identical to a published package detail document
+
+### `fontpub repair --json`
+
+On success, `data` MUST include:
+- `changed`: boolean
+- `planned_actions` when `--dry-run` is set
+- `repaired_packages`: array of repaired package IDs
+
+On failure, `error.details` SHOULD include:
+- `packages`: array of package repair results with findings
 
 ## Stability requirements
 

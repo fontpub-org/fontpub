@@ -67,7 +67,7 @@ Each entry:
 Additional rules:
 - `files[]` MUST NOT contain duplicate `path` values.
 - For a given `path`, the tuple `(style, weight)` is metadata used by clients; it does not affect integrity checks beyond immutability rules.
-- When constructing GitHub Raw URLs, each path segment MUST be percent-encoded as needed, while `/` separators remain literal.
+- When constructing GitHub Raw URLs, each path segment MUST be UTF-8 encoded and percent-encoded according to RFC 3986 path-segment rules, while `/` separators remain literal.
 - The total size of all assets referenced by a single manifest MUST be <= 2 GiB.
 - CLI tooling MAY assist with generating or editing `fontpub.json`, but generated values are not authoritative until the manifest is written and validated against this specification.
 

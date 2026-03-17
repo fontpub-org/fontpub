@@ -116,6 +116,7 @@ Consistency rules:
 - The package versions index, latest package detail alias, and root index are derived documents.
 - A version MUST NOT become discoverable through derived documents before its versioned package detail document is available.
 - If an update attempt fails after the versioned package detail document is written, retrying the same request MUST NOT alter that immutable document and MUST be sufficient to restore derived-document consistency.
+- Derived documents regenerated from the same set of published versioned package detail documents MUST be byte-identical.
 
 If the Indexer cannot complete an update because it cannot preserve these consistency requirements, it MUST return:
 - `503 Service Unavailable`
