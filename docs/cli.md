@@ -47,7 +47,7 @@ The CLI has two top-level command groups:
 - Print available packages and latest versions
 - MUST support `--json`
 
-### `fontpub show <owner>/<repo>`
+### `fontpub show <owner>/<repo> [--version <v>]`
 
 - Fetch:
   - `/v1/packages/<owner>/<repo>.json`, or
@@ -146,6 +146,7 @@ The CLI has two top-level command groups:
 
 ### `fontpub package init [PATH]`
 
+- If `PATH` is omitted, the selected repository root MUST default to the current working directory
 - Scan `PATH` for distributable font files
 - Infer candidate `files[]` entries from discovered assets
 - Infer candidate `name`, `style`, and `weight` values when possible
@@ -159,6 +160,7 @@ The CLI has two top-level command groups:
 
 ### `fontpub package validate [PATH]`
 
+- If `PATH` is omitted, the selected repository root MUST default to the current working directory
 - Validate `fontpub.json` against the current spec
 - Verify that all declared files exist
 - Verify path, version, license, and file-entry constraints
@@ -167,6 +169,7 @@ The CLI has two top-level command groups:
 ### `fontpub package preview [PATH] [--package-id <owner>/<repo>]`
 
 - Render a candidate package detail object as defined in `candidate-package-detail.md`
+- If `PATH` is omitted, the selected repository root MUST default to the current working directory
 - Preview is derived from the current local repository state rooted at `PATH`
 - If `--package-id` is provided, the CLI MUST use it as the package identity after validation and normalization
 - If `--package-id` is omitted, the CLI MUST derive the canonical GitHub `owner/repo` identity from local Git metadata using the rules in `candidate-package-detail.md`
@@ -289,4 +292,6 @@ Rules:
 - If `active_version_key` is present, at least one asset in that installed version MUST have `active: true`.
 - CLI flags or user inputs that name a version MUST accept any valid version string and normalize it to a version key before lookup.
 - `assets[].active` MUST be `true` if and only if the expected activation symlink exists and points to the expected `local_path`.
+- `symlink_path` MUST be present when `assets[].active` is `true`.
+- `symlink_path` MAY be omitted or null when `assets[].active` is `false`.
 - CLI MUST update the lockfile atomically.

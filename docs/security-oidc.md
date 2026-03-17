@@ -67,7 +67,7 @@ To minimize attack surface, v1 restricts updates to release tags.
 - The tag's version key MUST equal the manifest version key
 - `workflow_ref` MUST match the form `<owner>/<repo>/.github/workflows/fontpub.yml@<git-ref>`
 - the `<owner>/<repo>` prefix in `workflow_ref` MUST equal the normalized `repository` claim
-- the `<git-ref>` suffix in `workflow_ref` MUST be a non-empty Git ref string
+- the `<git-ref>` suffix in `workflow_ref` MUST be a non-empty string
 - `workflow_sha` MUST be a 40-hex commit SHA
 - `event_name` MUST be either `push` or `workflow_dispatch`
 

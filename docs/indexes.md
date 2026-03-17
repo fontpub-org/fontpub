@@ -61,6 +61,7 @@ Notes:
 - `latest_version_key` is derived from `latest_version` per `versioning.md`.
 - `latest_published_at` is when the current latest version was first published.
 - `generated_at` MUST equal the maximum `published_at` value among the versioned package detail documents represented in the root index.
+- If the root index contains no packages, `generated_at` MUST be the Unix epoch timestamp `1970-01-01T00:00:00Z`.
 
 ---
 

@@ -112,6 +112,14 @@ Each finding object MUST contain:
 
 If any package has one or more findings, the command MUST return a failure result (`ok: false`) even though package-level findings remain machine-readable in `error.details`.
 
+On failure, `error.details` MUST include:
+- `packages`: array of package verification results
+
+Each package verification result in `error.details.packages` MUST contain:
+- `package_id`
+- `ok`
+- `findings`
+
 ### Mutating commands with `--dry-run --json`
 
 For mutating commands, `data` MUST include:
