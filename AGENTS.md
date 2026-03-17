@@ -116,12 +116,15 @@ The repository should be organized around the protocol and the append-only publi
 │  │  └─ fontpub-rebuilder/         # derived-document rebuilder
 │  └─ internal/
 │     ├─ protocol/                  # versioning, canonical JSON, validation helpers
-│     ├─ oidc/                      # JWT claim validation
-│     ├─ githubraw/                 # pinned URL fetch logic
-│     ├─ publish/                   # immutable publication flow
-│     ├─ artifacts/                 # object-store access for public JSON
-│     ├─ state/                     # ownership and replay state abstractions
-│     └─ cli/                       # install, verify, activation, lockfile
+│     └─ indexer/
+│        ├─ artifacts/              # public JSON storage backends
+│        ├─ derive/                 # shared derived-document generation
+│        ├─ githubraw/              # pinned URL fetch logic
+│        ├─ httpx/                  # HTTP response helpers
+│        ├─ oidc/                   # JWT verification
+│        ├─ rebuilder/              # rebuild orchestration
+│        ├─ state/                  # ownership and replay state abstractions
+│        └─ updateapi/              # immutable publication flow
 └─ tools/
    └─ scripts/                      # release helpers, fixture generation, local checks
 ```
@@ -337,6 +340,10 @@ If any of the following are unclear, do not invent behavior. Add or update a tes
 - Provide a local command to run the Rebuilder against a development object store.
 - Provide a single command to run all protocol and Go tests.
 - Prefer fixture-driven local development over manual endpoint testing.
+
+Current local operator commands:
+- `FONTPUB_ARTIFACTS_DIR=/path/to/artifacts go run ./cmd/fontpub-rebuilder`
+- `FONTPUB_ARTIFACTS_DIR=/path/to/artifacts FONTPUB_GITHUB_JWKS_JSON='{\"keys\":[...]}' go run ./cmd/fontpub-indexer`
 
 ---
 

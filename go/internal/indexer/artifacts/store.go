@@ -50,6 +50,12 @@ func (s *MemoryStore) FailNextWrite(path string, count int) {
 	s.failNextPath[path] = count
 }
 
+func (s *MemoryStore) DeleteDocument(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.documents, path)
+}
+
 func (s *MemoryStore) GetVersionedPackageDetail(_ context.Context, packageID, versionKey string) (protocol.VersionedPackageDetail, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
