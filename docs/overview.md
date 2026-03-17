@@ -7,6 +7,7 @@ Core idea: the canonical source of truth for a font package is a GitHub reposito
 Recommended implementation architecture is described in `architecture.md`.
 CLI machine-readable behavior is described in `cli-json.md`.
 Expected GitHub Actions publication workflow is described in `publisher-workflow.md`.
+CLI JSON is part of the protocol surface and should be backed by schemas and conformance fixtures in `protocol/`.
 
 ## Components
 

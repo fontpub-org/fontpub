@@ -157,9 +157,14 @@ The CLI has two top-level command groups:
 - If required manifest values cannot be determined unambiguously:
   - interactive mode MAY prompt
   - non-interactive mode MUST fail with `INPUT_REQUIRED`
+- In human-readable mode, the CLI MUST summarize:
+  - discovered asset files
+  - inferred manifest fields
+  - unresolved required fields, if any
 - Ask for missing required manifest fields when running interactively
 - Output a candidate `fontpub.json`
 - If `--write` is set, write the candidate manifest to `fontpub.json`
+- If `--write` would overwrite an existing `fontpub.json`, the CLI MUST require confirmation unless `--yes` is set
 - If `--write` is not set, print the candidate manifest
 - MUST support `--json`
 - MUST support `--dry-run`

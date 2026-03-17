@@ -148,11 +148,14 @@ Deliverables:
   - versioned package detail
   - lockfile
   - error object
+  - CLI JSON envelope
+  - CLI command result objects used by `list`, `status`, `verify`, `repair`, `package init`, and `package preview`
 - fixtures for:
   - valid/invalid manifests
   - valid/invalid OIDC claim sets
   - valid/invalid version strings
   - immutability comparisons
+  - valid/invalid CLI JSON results
 - golden canonical JSON outputs
 
 Tests:
@@ -161,7 +164,7 @@ Tests:
 - canonical JSON serialization tests
 
 Acceptance:
-- Public documents and error objects can be validated without referring to implementation code.
+- Public documents, CLI JSON results, and error objects can be validated without referring to implementation code.
 
 ### Phase B: Shared Go protocol library
 **Directory:** `go/internal/protocol`
@@ -242,10 +245,12 @@ Tests:
 - download verification
 - activation naming and collision handling
 - temp-directory integration tests for install/activate/deactivate/uninstall
+- CLI JSON conformance tests against protocol schemas
 
 Acceptance:
 - CLI commands are deterministic and idempotent.
 - Corrupted installs are detected and reported.
+- `--json` output validates against the corresponding protocol schema.
 
 ---
 
