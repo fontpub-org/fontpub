@@ -29,6 +29,7 @@ type App struct {
 	Client  *MetadataClient
 	Stdout  io.Writer
 	Stderr  io.Writer
+	Stdin   io.Reader
 	JSON    bool
 	Command string
 	Now     func() time.Time
@@ -37,6 +38,7 @@ type App struct {
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	app := App{
 		Config: DefaultConfig(),
+		Stdin:  os.Stdin,
 		Stdout: stdout,
 		Stderr: stderr,
 	}
@@ -44,6 +46,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 }
 
 func (a *App) Run(ctx context.Context, args []string) int {
+	a.JSON = false
+	a.Command = ""
 	rest := make([]string, 0, len(args))
 	for _, arg := range args {
 		if arg == "--json" {
@@ -61,6 +65,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	}
 
 	switch rest[0] {
+	case "package":
+		return a.runPackage(ctx, rest[1:])
 	case "list":
 		return a.runList(ctx, rest[1:])
 	case "show":
@@ -81,6 +87,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return a.runUninstall(ctx, rest[1:])
 	case "update":
 		return a.runUpdate(ctx, rest[1:])
+	case "workflow":
+		return a.runWorkflow(ctx, rest[1:])
 	default:
 		return a.fail(a.Command, &CLIError{Code: "INTERNAL_ERROR", Message: "command is not implemented", Details: map[string]any{"command": rest[0]}})
 	}

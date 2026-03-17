@@ -373,6 +373,161 @@ func TestVerifyFailureForMissingFile(t *testing.T) {
 	}
 }
 
+func TestPackageInitJSONUsesExistingManifestFields(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dist", "ExampleSans-Regular.otf"), []byte("font-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	manifest := protocol.Manifest{
+		Name:    "Example Sans",
+		Author:  "Example Studio",
+		Version: "1.2.3",
+		License: "OFL-1.1",
+		Files:   []protocol.ManifestFile{{Path: "dist/ExampleSans-Regular.otf", Style: "normal", Weight: 400}},
+	}
+	body, _ := protocol.MarshalCanonical(manifest)
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--json"}); code != 0 {
+		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if err := protocol.ValidatePackageInitResult(env); err != nil {
+		t.Fatalf("ValidatePackageInitResult: %v", err)
+	}
+}
+
+func TestPackagePreviewJSON(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBytes := []byte("preview-font")
+	if err := os.WriteFile(filepath.Join(root, "dist", "ExampleSans-Regular.otf"), fontBytes, 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	manifest := protocol.Manifest{
+		Name:    "Example Sans",
+		Author:  "Example Studio",
+		Version: "1.2.3",
+		License: "OFL-1.1",
+		Files:   []protocol.ManifestFile{{Path: "dist/ExampleSans-Regular.otf", Style: "normal", Weight: 400}},
+	}
+	body, _ := protocol.MarshalCanonical(manifest)
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "preview", root, "--package-id", "Example/Family", "--json"}); code != 0 {
+		t.Fatalf("package preview code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if err := protocol.ValidatePackagePreviewResult(env); err != nil {
+		t.Fatalf("ValidatePackagePreviewResult: %v", err)
+	}
+	if env.Data["package_id"] != "example/family" {
+		t.Fatalf("unexpected package_id: %#v", env.Data["package_id"])
+	}
+}
+
+func TestPackageValidateAndCheck(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dist", "ExampleSans-Regular.otf"), []byte("font"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	manifest := protocol.Manifest{
+		Name:    "Example Sans",
+		Author:  "Example Studio",
+		Version: "1.2.3",
+		License: "OFL-1.1",
+		Files:   []protocol.ManifestFile{{Path: "dist/ExampleSans-Regular.otf", Style: "normal", Weight: 400}},
+	}
+	body, _ := protocol.MarshalCanonical(manifest)
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "validate", root, "--json"}); code != 0 {
+		t.Fatalf("package validate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"package", "check", root, "--tag", "v1.2.3", "--json"}); code != 0 {
+		t.Fatalf("package check code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"package", "check", root, "--tag", "v2.0.0", "--json"}); code == 0 {
+		t.Fatalf("expected package check failure")
+	}
+}
+
+func TestWorkflowInitDryRunAndWrite(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"workflow", "init", root, "--dry-run", "--json"}); code != 0 {
+		t.Fatalf("workflow init dry-run code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal dry-run: %v", err)
+	}
+	if env.Command != "workflow init" || !env.OK {
+		t.Fatalf("unexpected env: %+v", env)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"workflow", "init", root, "--yes"}); code != 0 {
+		t.Fatalf("workflow init write code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, ".github", "workflows", "fontpub.yml")); err != nil {
+		t.Fatalf("os.Stat workflow: %v", err)
+	}
+}
+
+func TestPackageInspectJSON(t *testing.T) {
+	root := t.TempDir()
+	fontPath := filepath.Join(root, "ExampleSans-BoldItalic.otf")
+	if err := os.WriteFile(fontPath, []byte("font"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "inspect", fontPath, "--json"}); code != 0 {
+		t.Fatalf("package inspect code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal inspect: %v", err)
+	}
+	if env.Data["style"] != "italic" || int(env.Data["weight"].(float64)) != 700 {
+		t.Fatalf("unexpected inspect data: %#v", env.Data)
+	}
+}
+
 type responseSpec struct {
 	body any
 	raw  []byte
