@@ -112,8 +112,8 @@ The repository should be organized around the protocol and the append-only publi
 │  ├─ go.mod
 │  ├─ cmd/
 │  │  ├─ fontpub/                   # CLI
-│  │  ├─ update-api/                # POST /v1/update service
-│  │  └─ rebuild-indexes/           # derived-document rebuilder
+│  │  ├─ fontpub-indexer/           # POST /v1/update service
+│  │  └─ fontpub-rebuilder/         # derived-document rebuilder
 │  └─ internal/
 │     ├─ protocol/                  # versioning, canonical JSON, validation helpers
 │     ├─ oidc/                      # JWT claim validation
@@ -186,7 +186,7 @@ Acceptance:
 - Shared protocol logic is implementation-agnostic and deterministic.
 
 ### Phase C: Update API
-**Directory:** `go/cmd/update-api`
+**Directory:** `go/cmd/fontpub-indexer`
 
 Deliverables:
 - `POST /v1/update`
@@ -211,7 +211,7 @@ Acceptance:
 - The Update API can publish immutable versioned package detail documents and recover derived documents after retry.
 
 ### Phase D: Rebuilder
-**Directory:** `go/cmd/rebuild-indexes`
+**Directory:** `go/cmd/fontpub-rebuilder`
 
 Deliverables:
 - full rebuild from published versioned package detail documents
