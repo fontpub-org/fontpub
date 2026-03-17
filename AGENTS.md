@@ -115,6 +115,7 @@ The repository should be organized around the protocol and the append-only publi
 │  │  ├─ fontpub-indexer/           # POST /v1/update service
 │  │  └─ fontpub-rebuilder/         # derived-document rebuilder
 │  └─ internal/
+│     ├─ cli/                       # CLI config, metadata client, lockfile, commands
 │     ├─ protocol/                  # versioning, canonical JSON, validation helpers
 │     └─ indexer/
 │        ├─ artifacts/              # public JSON storage backends
