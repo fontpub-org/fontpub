@@ -70,6 +70,18 @@ It applies whenever a command is invoked with `--json`.
 
 ### `fontpub status --json`
 
+`data` MUST contain:
+- `packages`
+
+`data.packages` MUST be an object keyed by canonical package ID.
+
+Each package status object MUST contain:
+- `installed_versions`
+- `active_version_key`
+
+`installed_versions` MUST be an array of installed version keys sorted by version precedence descending.
+`active_version_key` MUST be either a version key present in `installed_versions` or `null`.
+
 ```json
 {
   "schema_version": "1",
@@ -183,7 +195,7 @@ On success, `data` MUST include:
 - `planned_actions` when `--dry-run` is set
 - `repaired_packages`: array of repaired package IDs
 
-On failure, `error.details` SHOULD include:
+On failure, `error.details` MUST include:
 - `packages`: array of package repair results with findings
 
 ## Stability requirements
