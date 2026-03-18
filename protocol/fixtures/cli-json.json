@@ -1,4 +1,21 @@
 {
+  "list": {
+    "valid": {
+      "schema_version": "1",
+      "ok": true,
+      "command": "list",
+      "data": {
+        "packages": [
+          {
+            "package_id": "example/family",
+            "latest_version": "1.2.3",
+            "latest_version_key": "1.2.3",
+            "latest_published_at": "2026-01-02T00:00:00Z"
+          }
+        ]
+      }
+    }
+  },
   "status": {
     "valid": {
       "schema_version": "1",
@@ -63,6 +80,36 @@
           { "field": "files[0].style", "value": "normal", "source": "embedded_metadata" }
         ],
         "unresolved_fields": []
+      }
+    }
+  },
+  "package_preview": {
+    "valid": {
+      "schema_version": "1",
+      "ok": true,
+      "command": "package preview",
+      "data": {
+        "schema_version": "1",
+        "package_id": "example/family",
+        "display_name": "Example Sans",
+        "author": "Example Studio",
+        "license": "OFL-1.1",
+        "version": "1.2.3",
+        "version_key": "1.2.3",
+        "source": {
+          "kind": "local_repository",
+          "root_path": "/Users/example/family"
+        },
+        "assets": [
+          {
+            "path": "dist/ExampleSans-Regular.otf",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "format": "otf",
+            "style": "normal",
+            "weight": 400,
+            "size_bytes": 1000
+          }
+        ]
       }
     }
   },

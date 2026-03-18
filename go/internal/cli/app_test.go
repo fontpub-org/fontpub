@@ -54,6 +54,9 @@ func TestRunListJSON(t *testing.T) {
 	if err := protocol.ValidateCLIEnvelope(env); err != nil {
 		t.Fatalf("ValidateCLIEnvelope: %v", err)
 	}
+	if err := protocol.ValidateCLISchema("list-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(list): %v", err)
+	}
 	if env.Command != "list" || !env.OK {
 		t.Fatalf("unexpected env: %+v", env)
 	}
@@ -147,6 +150,9 @@ func TestRunStatusJSON(t *testing.T) {
 	}
 	if err := protocol.ValidateStatusResult(env); err != nil {
 		t.Fatalf("ValidateStatusResult: %v", err)
+	}
+	if err := protocol.ValidateCLISchema("status-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(status): %v", err)
 	}
 }
 
@@ -255,6 +261,9 @@ func TestInstallActivateVerifyRepairAndUninstall(t *testing.T) {
 	if err := protocol.ValidateVerifyResult(env); err != nil {
 		t.Fatalf("ValidateVerifyResult: %v", err)
 	}
+	if err := protocol.ValidateCLISchema("verify-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(verify): %v", err)
+	}
 
 	lock, ok, err := LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}.Load()
 	if err != nil || !ok {
@@ -269,6 +278,15 @@ func TestInstallActivateVerifyRepairAndUninstall(t *testing.T) {
 	stderr.Reset()
 	if code := app.Run(context.Background(), []string{"repair", "example/family", "--activation-dir", activationDir, "--json"}); code != 0 {
 		t.Fatalf("repair code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal repair: %v", err)
+	}
+	if err := protocol.ValidateRepairResult(env); err != nil {
+		t.Fatalf("ValidateRepairResult: %v", err)
+	}
+	if err := protocol.ValidateCLISchema("repair-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(repair): %v", err)
 	}
 	if _, err := os.Lstat(symlinkPath); err != nil {
 		t.Fatalf("os.Lstat(symlinkPath): %v", err)
@@ -400,6 +418,9 @@ func TestVerifyFailureForMissingFile(t *testing.T) {
 	if err := protocol.ValidateVerifyResult(env); err != nil {
 		t.Fatalf("ValidateVerifyResult failure: %v", err)
 	}
+	if err := protocol.ValidateCLISchema("verify-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(verify failure): %v", err)
+	}
 }
 
 func TestPackageInitJSONUsesExistingManifestFields(t *testing.T) {
@@ -434,6 +455,9 @@ func TestPackageInitJSONUsesExistingManifestFields(t *testing.T) {
 	if err := protocol.ValidatePackageInitResult(env); err != nil {
 		t.Fatalf("ValidatePackageInitResult: %v", err)
 	}
+	if err := protocol.ValidateCLISchema("package-init-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(package init): %v", err)
+	}
 }
 
 func TestPackageInitJSONPrefersEmbeddedMetadata(t *testing.T) {
@@ -460,6 +484,9 @@ func TestPackageInitJSONPrefersEmbeddedMetadata(t *testing.T) {
 	}
 	if err := protocol.ValidatePackageInitResult(env); err != nil {
 		t.Fatalf("ValidatePackageInitResult: %v", err)
+	}
+	if err := protocol.ValidateCLISchema("package-init-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(package init): %v", err)
 	}
 	manifestData, ok := env.Data["manifest"].(map[string]any)
 	if !ok {
@@ -530,6 +557,9 @@ func TestPackagePreviewJSON(t *testing.T) {
 	}
 	if err := protocol.ValidatePackagePreviewResult(env); err != nil {
 		t.Fatalf("ValidatePackagePreviewResult: %v", err)
+	}
+	if err := protocol.ValidateCLISchema("package-preview-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(package preview): %v", err)
 	}
 	if env.Data["package_id"] != "example/family" {
 		t.Fatalf("unexpected package_id: %#v", env.Data["package_id"])

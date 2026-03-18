@@ -193,6 +193,30 @@ func TestCLIJSONFixtures(t *testing.T) {
 		Valid CLIEnvelope `json:"valid"`
 	}
 	readFixture(t, "cli-json.json", &fixture)
+	for name, record := range fixture {
+		schemaFile := schemaFileNameForCLICommand(record.Valid.Command)
+		if schemaFile == "" {
+			t.Fatalf("%s: missing schema mapping for command %q", name, record.Valid.Command)
+		}
+		if err := ValidateCLISchema(schemaFile, record.Valid); err != nil {
+			t.Fatalf("%s schema validation: %v", name, err)
+		}
+	}
+	if err := ValidateCLISchema("envelope.schema.json", fixture["list"].Valid); err != nil {
+		t.Fatalf("list envelope: %v", err)
+	}
+	if err := ValidateCLISchema("envelope.schema.json", fixture["verify_failure"].Valid); err != nil {
+		t.Fatalf("verify_failure envelope: %v", err)
+	}
+	if err := ValidateCLISchema("envelope.schema.json", fixture["package_preview"].Valid); err != nil {
+		t.Fatalf("package_preview envelope: %v", err)
+	}
+	if err := ValidateCLISchema("envelope.schema.json", fixture["repair_failure"].Valid); err != nil {
+		t.Fatalf("repair_failure envelope: %v", err)
+	}
+	if err := ValidateCLIEnvelope(fixture["list"].Valid); err != nil {
+		t.Fatalf("list envelope validator: %v", err)
+	}
 	if err := ValidateStatusResult(fixture["status"].Valid); err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -201,6 +225,9 @@ func TestCLIJSONFixtures(t *testing.T) {
 	}
 	if err := ValidatePackageInitResult(fixture["package_init"].Valid); err != nil {
 		t.Fatalf("package_init: %v", err)
+	}
+	if err := ValidatePackagePreviewResult(fixture["package_preview"].Valid); err != nil {
+		t.Fatalf("package_preview: %v", err)
 	}
 	if err := ValidateRepairResult(fixture["repair_failure"].Valid); err != nil {
 		t.Fatalf("repair_failure: %v", err)
