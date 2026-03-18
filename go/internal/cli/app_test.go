@@ -66,6 +66,44 @@ func TestRunListJSON(t *testing.T) {
 	}
 }
 
+func TestRunListHumanReadable(t *testing.T) {
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return jsonResponse(http.StatusOK, protocol.RootIndex{
+					SchemaVersion: "1",
+					GeneratedAt:   "2026-01-02T00:00:00Z",
+					Packages: map[string]protocol.RootIndexPackage{
+						"example/family": {LatestVersion: "1.2.3", LatestVersionKey: "1.2.3", LatestPublishedAt: "2026-01-02T00:00:00Z"},
+					},
+				}), nil
+			}),
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"list"}); code != 0 {
+		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Available packages:\n",
+		"  - example/family (latest 1.2.3, published 2026-01-02T00:00:00Z)\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("list output missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestRunShowJSONLatestAndVersion(t *testing.T) {
 	client := &MetadataClient{
 		BaseURL:   "https://fontpub.org",
@@ -119,6 +157,55 @@ func TestRunShowJSONLatestAndVersion(t *testing.T) {
 		}
 		if env.Data["package_id"] != "example/family" || env.Data["version_key"] != "1.2.3" {
 			t.Fatalf("unexpected show data: %#v", env.Data)
+		}
+	}
+}
+
+func TestRunShowHumanReadable(t *testing.T) {
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return jsonResponse(http.StatusOK, protocol.VersionedPackageDetail{
+					SchemaVersion: "1",
+					PackageID:     "example/family",
+					DisplayName:   "Example Sans",
+					Author:        "Example Studio",
+					License:       "OFL-1.1",
+					Version:       "1.2.3",
+					VersionKey:    "1.2.3",
+					PublishedAt:   "2026-01-02T00:00:00Z",
+					GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "0123456789abcdef0123456789abcdef01234567"},
+					ManifestURL:   "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+					Assets: []protocol.VersionedAsset{
+						{Path: "dist/ExampleSans-Regular.otf", URL: "https://assets.example/regular.otf", SHA256: "abc", Format: "otf", Style: "normal", Weight: 400, SizeBytes: 11},
+					},
+				}), nil
+			}),
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"show", "example/family"}); code != 0 {
+		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Package: example/family\n",
+		"Display name: Example Sans\n",
+		"Version: 1.2.3 (key 1.2.3)\n",
+		"GitHub: example/family @ 0123456789abcdef0123456789abcdef01234567\n",
+		"Assets:\n",
+		"  - dist/ExampleSans-Regular.otf [otf] style=normal weight=400 size=11\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("show output missing %q\n%s", want, output)
 		}
 	}
 }
@@ -455,6 +542,95 @@ func TestVerifyFailureForMissingFile(t *testing.T) {
 	}
 }
 
+func TestVerifyHumanReadableSuccess(t *testing.T) {
+	stateDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	body := []byte("font-bytes")
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	sum := sha256.Sum256(body)
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", SHA256: fmtHex(sum[:]), LocalPath: localPath},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: stateDir}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"verify"}); code != 0 {
+		t.Fatalf("verify code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Verification results:\n",
+		"  example/family: ok\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("verify output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestVerifyHumanReadableFailure(t *testing.T) {
+	stateDir := t.TempDir()
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", SHA256: strings.Repeat("a", 64), LocalPath: filepath.Join(stateDir, "missing.otf")},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: stateDir}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"verify"}); code == 0 {
+		t.Fatalf("expected verify failure")
+	}
+	errOutput := stderr.String()
+	for _, want := range []string{
+		"verification failed\n",
+		"Details:\n",
+		"  example/family: failed\n",
+		"installed asset file is missing (dist/ExampleSans-Regular.otf)\n",
+	} {
+		if !strings.Contains(errOutput, want) {
+			t.Fatalf("verify stderr missing %q\n%s", want, errOutput)
+		}
+	}
+}
+
 func TestPackageInitJSONUsesExistingManifestFields(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
@@ -718,6 +894,70 @@ func TestWorkflowInitDryRunAndWrite(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated workflow missing %q\n%s", want, text)
+		}
+	}
+}
+
+func TestRepairHumanReadableDryRun(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	body := []byte("font-bytes")
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	sum := sha256.Sum256(body)
+	symlinkPath := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: func() *string { v := "1.2.3"; return &v }(),
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{
+								Path:        "dist/ExampleSans-Regular.otf",
+								SHA256:      fmtHex(sum[:]),
+								LocalPath:   localPath,
+								Active:      true,
+								SymlinkPath: &symlinkPath,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: activationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"repair", "example/family", "--dry-run", "--activation-dir", activationDir}); code != 0 {
+		t.Fatalf("repair code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Repair results:\n",
+		"  example/family: repaired\n",
+		"Planned actions:\n",
+		"  - create symlink [example/family@1.2.3] dist/ExampleSans-Regular.otf\n",
+		"  - write lockfile [example/family]\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("repair output missing %q\n%s", want, output)
 		}
 	}
 }

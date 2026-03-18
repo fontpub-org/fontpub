@@ -129,8 +129,19 @@ func (a *App) runList(ctx context.Context, args []string) int {
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "list", Data: data})
 	}
+	if len(packages) == 0 {
+		fmt.Fprintln(a.Stdout, "no published packages")
+		return 0
+	}
+	fmt.Fprintln(a.Stdout, "Available packages:")
 	for _, pkg := range packages {
-		fmt.Fprintf(a.Stdout, "%s %s\n", pkg["package_id"], pkg["latest_version"])
+		fmt.Fprintf(
+			a.Stdout,
+			"  - %s (latest %s, published %s)\n",
+			pkg["package_id"],
+			pkg["latest_version"],
+			pkg["latest_published_at"],
+		)
 	}
 	return 0
 }
@@ -163,13 +174,7 @@ func (a *App) runShow(ctx context.Context, args []string) int {
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "show", Data: data})
 	}
-	fmt.Fprintf(a.Stdout, "%s %s\n", detail.PackageID, detail.Version)
-	fmt.Fprintf(a.Stdout, "name: %s\n", detail.DisplayName)
-	fmt.Fprintf(a.Stdout, "author: %s\n", detail.Author)
-	fmt.Fprintf(a.Stdout, "license: %s\n", detail.License)
-	for _, asset := range detail.Assets {
-		fmt.Fprintf(a.Stdout, "asset: %s %s %d\n", asset.Path, asset.Style, asset.Weight)
-	}
+	printPackageDetailSummary(a.Stdout, detail)
 	return 0
 }
 
@@ -453,12 +458,11 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 		}
 		return a.writeJSON(env)
 	}
-	for _, result := range results {
-		fmt.Fprintf(a.Stdout, "%s ok\n", result.PackageID)
-	}
 	if len(results) == 0 {
 		fmt.Fprintln(a.Stdout, "no installed packages")
+		return 0
 	}
+	printPackageCheckResults(a.Stdout, "Verification results:", results)
 	return 0
 }
 
@@ -606,6 +610,24 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 			return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "repair output validation failed", Details: map[string]any{"reason": err.Error()}})
 		}
 		return a.writeJSON(env)
+	}
+	if len(results) == 0 {
+		fmt.Fprintln(a.Stdout, "no installed packages")
+		return 0
+	}
+	if !changed {
+		fmt.Fprintln(a.Stdout, "Repair results:")
+		for _, result := range results {
+			fmt.Fprintf(a.Stdout, "  %s: no changes\n", result.PackageID)
+		}
+		return 0
+	}
+	fmt.Fprintln(a.Stdout, "Repair results:")
+	for _, item := range repaired {
+		fmt.Fprintf(a.Stdout, "  %s: repaired\n", item)
+	}
+	if dryRun && len(planned) > 0 {
+		printPlannedActions(a.Stdout, planned)
 	}
 	return 0
 }
@@ -824,6 +846,7 @@ func (a *App) writePackageFailure(command, message string, results []PackageChec
 		return 1
 	}
 	fmt.Fprintln(a.Stderr, message)
+	printPackageCheckResults(a.Stderr, "Details:", results)
 	return 1
 }
 
@@ -856,6 +879,95 @@ func (a *App) writeJSON(env protocol.CLIEnvelope) int {
 	}
 	_, _ = a.Stdout.Write(append(body, '\n'))
 	return 0
+}
+
+func printPackageDetailSummary(w io.Writer, detail protocol.VersionedPackageDetail) {
+	fmt.Fprintf(w, "Package: %s\n", detail.PackageID)
+	fmt.Fprintf(w, "Display name: %s\n", detail.DisplayName)
+	fmt.Fprintf(w, "Author: %s\n", detail.Author)
+	fmt.Fprintf(w, "License: %s\n", detail.License)
+	fmt.Fprintf(w, "Version: %s (key %s)\n", detail.Version, detail.VersionKey)
+	fmt.Fprintf(w, "Published at: %s\n", detail.PublishedAt)
+	fmt.Fprintf(w, "GitHub: %s/%s @ %s\n", detail.GitHub.Owner, detail.GitHub.Repo, detail.GitHub.SHA)
+	fmt.Fprintf(w, "Manifest URL: %s\n", detail.ManifestURL)
+	fmt.Fprintln(w, "Assets:")
+	for _, asset := range detail.Assets {
+		fmt.Fprintf(
+			w,
+			"  - %s [%s] style=%s weight=%d size=%d\n",
+			asset.Path,
+			asset.Format,
+			asset.Style,
+			asset.Weight,
+			asset.SizeBytes,
+		)
+	}
+}
+
+func printPackageCheckResults(w io.Writer, header string, results []PackageCheckResult) {
+	if header != "" {
+		fmt.Fprintln(w, header)
+	}
+	for _, result := range results {
+		if result.OK {
+			fmt.Fprintf(w, "  %s: ok\n", result.PackageID)
+			continue
+		}
+		fmt.Fprintf(w, "  %s: failed\n", result.PackageID)
+		for _, finding := range result.Findings {
+			fmt.Fprintf(w, "    - [%s/%s] %s", finding.Severity, finding.Subject, finding.Message)
+			if path, ok := finding.Details["path"].(string); ok && path != "" {
+				fmt.Fprintf(w, " (%s)", path)
+			}
+			fmt.Fprintln(w)
+		}
+	}
+}
+
+func printPlannedActions(w io.Writer, planned []PlannedAction) {
+	if len(planned) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "Planned actions:")
+	for _, action := range planned {
+		fmt.Fprintf(w, "  - %s", humanizePlannedAction(action))
+		if action.PackageID != "" {
+			fmt.Fprintf(w, " [%s", action.PackageID)
+			if action.VersionKey != "" {
+				fmt.Fprintf(w, "@%s", action.VersionKey)
+			}
+			fmt.Fprint(w, "]")
+		}
+		if action.Path != "" {
+			fmt.Fprintf(w, " %s", action.Path)
+		}
+		fmt.Fprintln(w)
+	}
+}
+
+func humanizePlannedAction(action PlannedAction) string {
+	switch action.Type {
+	case "download_asset":
+		return "download asset"
+	case "write_asset":
+		return "write asset"
+	case "remove_asset":
+		return "remove asset"
+	case "create_symlink":
+		return "create symlink"
+	case "remove_symlink":
+		return "remove symlink"
+	case "write_lockfile":
+		return "write lockfile"
+	case "remove_lockfile_entry":
+		return "remove lockfile entry"
+	case "write_manifest":
+		return "write manifest"
+	case "write_workflow":
+		return "write workflow"
+	default:
+		return action.Type
+	}
 }
 
 func asCLIError(err error) *CLIError {
