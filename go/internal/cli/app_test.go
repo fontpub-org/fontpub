@@ -619,13 +619,36 @@ func TestWorkflowInitDryRunAndWrite(t *testing.T) {
 	if env.Command != "workflow init" || !env.OK {
 		t.Fatalf("unexpected env: %+v", env)
 	}
+	data, ok := env.Data["planned_actions"].([]any)
+	if !ok || len(data) != 1 {
+		t.Fatalf("unexpected planned_actions: %#v", env.Data["planned_actions"])
+	}
 	stdout.Reset()
 	stderr.Reset()
 	if code := app.Run(context.Background(), []string{"workflow", "init", root, "--yes"}); code != 0 {
 		t.Fatalf("workflow init write code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(root, ".github", "workflows", "fontpub.yml")); err != nil {
+	workflowPath := filepath.Join(root, ".github", "workflows", "fontpub.yml")
+	if _, err := os.Stat(workflowPath); err != nil {
 		t.Fatalf("os.Stat workflow: %v", err)
+	}
+	body, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile workflow: %v", err)
+	}
+	text := string(body)
+	for _, want := range []string{
+		`workflow_dispatch:`,
+		`fetch-depth: 0`,
+		`persist-credentials: false`,
+		`git rev-parse --verify "${{ steps.ref.outputs.ref }}^{commit}"`,
+		`grep -Eq '^[vV](0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*$'`,
+		`ACTIONS_ID_TOKEN_REQUEST_URL`,
+		`https://fontpub.org/v1/update`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("generated workflow missing %q\n%s", want, text)
+		}
 	}
 }
 

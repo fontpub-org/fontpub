@@ -52,6 +52,10 @@ Additional requirements:
 - is compatible with the claim requirements in `security-oidc.md`
 - requests `id-token: write` and `contents: read`
 - sends the exact request body required by `indexer-api.md`
+- validates the `workflow_dispatch` `tag` input before attempting publication
+- fails before publication if the requested tag is missing, malformed, or does not resolve to a commit
+- resolves `sha` using the exact selected tag ref rather than the default checkout branch state
+- makes the publication steps readable enough that a publisher can audit what will be sent to Fontpub
 
 ## Non-goals
 

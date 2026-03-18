@@ -784,11 +784,21 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Determine ref
+      - name: Determine publication ref
         id: ref
         run: |
+          set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            echo "ref=refs/tags/${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            TAG="${{ inputs.tag }}"
+            if [ -z "${TAG}" ]; then
+              echo "::error::workflow_dispatch requires a tag input"
+              exit 1
+            fi
+            if ! printf '%%s\n' "${TAG}" | grep -Eq '^[vV](0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*$'; then
+              echo "::error::tag must match Fontpub versioning (example: v1.2.3)"
+              exit 1
+            fi
+            echo "ref=refs/tags/${TAG}" >> "$GITHUB_OUTPUT"
           else
             echo "ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"
           fi
@@ -796,31 +806,44 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.ref.outputs.ref }}
-      - name: Resolve tag commit
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve publication commit
         id: sha
         run: |
-          git rev-parse "${{ steps.ref.outputs.ref }}" > sha.txt
+          set -euo pipefail
+          git rev-parse --verify "${{ steps.ref.outputs.ref }}^{commit}" > sha.txt
           echo "sha=$(cat sha.txt)" >> "$GITHUB_OUTPUT"
       - name: Request OIDC token
         id: token
-        env:
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
         run: |
+          set -euo pipefail
           RESPONSE=$(curl -fsSL -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://fontpub.org")
-          python - <<'PY'
-import json,sys
-data=json.load(sys.stdin)
-print(f"token={data['value']}")
-PY <<< "$RESPONSE" >> "$GITHUB_OUTPUT"
+          TOKEN=$(printf '%%s' "$RESPONSE" | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          printf 'token=%%s\n' "$TOKEN" >> "$GITHUB_OUTPUT"
       - name: Publish
         env:
           TOKEN: ${{ steps.token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ steps.sha.outputs.sha }}
+          REF: ${{ steps.ref.outputs.ref }}
         run: |
+          set -euo pipefail
+          BODY=$(python - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "repository": os.environ["REPOSITORY"],
+    "sha": os.environ["SHA"],
+    "ref": os.environ["REF"],
+}, separators=(",", ":")))
+PY
+          )
           curl -fsSL \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"sha\":\"${{ steps.sha.outputs.sha }}\",\"ref\":\"${{ steps.ref.outputs.ref }}\"}" \
+            -d "$BODY" \
             %s/v1/update
 `, baseURL))
 }
