@@ -241,7 +241,7 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 	sort.Strings(packageIDs)
 	for _, packageID := range packageIDs {
 		entry := packagesData[packageID].(map[string]any)
-		active := "inactive"
+		active := "none"
 		if entry["active_version_key"] != nil {
 			active = entry["active_version_key"].(string)
 		}
@@ -250,7 +250,9 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 		for _, version := range versions {
 			versionTexts = append(versionTexts, version.(string))
 		}
-		fmt.Fprintf(a.Stdout, "%s installed=%s active=%s\n", packageID, strings.Join(versionTexts, ","), active)
+		fmt.Fprintf(a.Stdout, "%s\n", packageID)
+		fmt.Fprintf(a.Stdout, "  installed versions: %s\n", strings.Join(versionTexts, ", "))
+		fmt.Fprintf(a.Stdout, "  active version: %s\n", active)
 	}
 	return 0
 }

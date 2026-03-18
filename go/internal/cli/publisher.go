@@ -85,7 +85,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		return a.fail("package init", errObj)
 	}
 
-	manifest, inferences, unresolved, err := a.buildCandidateManifest(root)
+	manifest, assets, inferences, unresolved, err := a.buildCandidateManifest(root)
 	if err != nil {
 		return a.fail("package init", asCLIError(err))
 	}
@@ -101,6 +101,10 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		if len(unresolved) > 0 {
 			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "required manifest fields could not be resolved", Details: map[string]any{"unresolved_fields": unresolved}})
 		}
+	}
+
+	if !a.JSON {
+		printPackageInitSummary(a.Stdout, root, manifest, assets, inferences, unresolved)
 	}
 
 	data := map[string]any{
@@ -130,10 +134,15 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 				return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "could not write manifest", Details: map[string]any{"path": target, "reason": err.Error()}})
 			}
 		}
+		if dryRun {
+			fmt.Fprintf(a.Stdout, "manifest ready (dry-run): %s\n", target)
+			return 0
+		}
 		fmt.Fprintf(a.Stdout, "manifest ready: %s\n", target)
 		return 0
 	}
 
+	fmt.Fprintln(a.Stdout, "Candidate fontpub.json:")
 	body, err := protocol.MarshalCanonical(manifest)
 	if err != nil {
 		return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "could not serialize manifest", Details: map[string]any{"reason": err.Error()}})
@@ -213,7 +222,7 @@ func (a *App) runPackageInspect(_ context.Context, args []string) int {
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package inspect", Data: data})
 	}
-	fmt.Fprintf(a.Stdout, "%s %s %d %s\n", info.Path, info.Style, info.Weight, info.Format)
+	printInspectionSummary(a.Stdout, info)
 	return 0
 }
 
@@ -303,13 +312,13 @@ func (a *App) runWorkflowInit(_ context.Context, args []string) int {
 	return 0
 }
 
-func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inferenceRecord, []string, error) {
+func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inspection, []inferenceRecord, []string, error) {
 	assets, err := scanFontAssets(root)
 	if err != nil {
-		return protocol.Manifest{}, nil, nil, err
+		return protocol.Manifest{}, nil, nil, nil, err
 	}
 	if len(assets) == 0 {
-		return protocol.Manifest{}, nil, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "no distributable font files found", Details: map[string]any{"root_path": root}}
+		return protocol.Manifest{}, nil, nil, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "no distributable font files found", Details: map[string]any{"root_path": root}}
 	}
 	files := make([]protocol.ManifestFile, 0, len(assets))
 	inferences := make([]inferenceRecord, 0)
@@ -354,7 +363,7 @@ func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inferenc
 			inferences = append(inferences, inferenceRecord{Field: "name", Value: name, Source: commonNameSource(assets)})
 		}
 	}
-	return manifest, inferences, unresolvedFields(manifest), nil
+	return manifest, assets, inferences, unresolvedFields(manifest), nil
 }
 
 func (a *App) buildCandidatePackageDetail(root, explicitPackageID string) (protocol.CandidatePackageDetail, error) {
@@ -634,6 +643,79 @@ func commonNameSource(assets []inspection) string {
 		return "filename_heuristic"
 	}
 	return source
+}
+
+func printPackageInitSummary(w io.Writer, root string, manifest protocol.Manifest, assets []inspection, inferences []inferenceRecord, unresolved []string) {
+	fmt.Fprintf(w, "Repository: %s\n", root)
+	fmt.Fprintln(w, "Discovered assets:")
+	for _, asset := range assets {
+		fmt.Fprintf(
+			w,
+			"  - %s [%s] style=%s (%s) weight=%d (%s)\n",
+			asset.Path,
+			asset.Format,
+			asset.Style,
+			humanizeInferenceSource(asset.styleSource),
+			asset.Weight,
+			humanizeInferenceSource(asset.weightSource),
+		)
+		if asset.Name != "" {
+			fmt.Fprintf(w, "    family=%s (%s)\n", asset.Name, humanizeInferenceSource(asset.nameSource))
+		}
+	}
+
+	inferenceByField := map[string]inferenceRecord{}
+	for _, inference := range inferences {
+		inferenceByField[inference.Field] = inference
+	}
+
+	fmt.Fprintln(w, "Manifest fields:")
+	printManifestFieldSummary(w, "name", manifest.Name, inferenceByField["name"])
+	printManifestFieldSummary(w, "author", manifest.Author, inferenceByField["author"])
+	printManifestFieldSummary(w, "version", manifest.Version, inferenceByField["version"])
+	printManifestFieldSummary(w, "license", manifest.License, inferenceByField["license"])
+
+	if len(unresolved) == 0 {
+		fmt.Fprintln(w, "Unresolved fields: none")
+	} else {
+		fmt.Fprintf(w, "Unresolved fields: %s\n", strings.Join(unresolved, ", "))
+	}
+	fmt.Fprintln(w)
+}
+
+func printManifestFieldSummary(w io.Writer, field, value string, inference inferenceRecord) {
+	if value == "" {
+		fmt.Fprintf(w, "  %s: unresolved\n", field)
+		return
+	}
+	source := inference.Source
+	if source == "" {
+		source = "user_input"
+	}
+	fmt.Fprintf(w, "  %s: %s (%s)\n", field, value, humanizeInferenceSource(source))
+}
+
+func printInspectionSummary(w io.Writer, info inspection) {
+	fmt.Fprintf(w, "Path: %s\n", info.Path)
+	fmt.Fprintf(w, "Format: %s\n", info.Format)
+	if info.Name != "" {
+		fmt.Fprintf(w, "Family: %s (%s)\n", info.Name, humanizeInferenceSource(info.nameSource))
+	}
+	fmt.Fprintf(w, "Style: %s (%s)\n", info.Style, humanizeInferenceSource(info.styleSource))
+	fmt.Fprintf(w, "Weight: %d (%s)\n", info.Weight, humanizeInferenceSource(info.weightSource))
+}
+
+func humanizeInferenceSource(source string) string {
+	switch source {
+	case "embedded_metadata":
+		return "embedded metadata"
+	case "filename_heuristic":
+		return "filename heuristic"
+	case "user_input":
+		return "user input"
+	default:
+		return source
+	}
 }
 
 func oneOptionalPath(args []string) (string, *CLIError) {

@@ -156,6 +156,38 @@ func TestRunStatusJSON(t *testing.T) {
 	}
 }
 
+func TestRunStatusHumanReadable(t *testing.T) {
+	dir := t.TempDir()
+	lockfilePath := filepath.Join(dir, "fontpub.lock")
+	body, err := os.ReadFile(filepath.Join("..", "..", "..", "protocol", "golden", "lockfile.json"))
+	if err != nil {
+		t.Fatalf("os.ReadFile: %v", err)
+	}
+	if err := os.WriteFile(lockfilePath, body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: dir, BaseURL: "https://fontpub.org"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"status"}); code != 0 {
+		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"example/family\n",
+		"  installed versions: 1.2.3\n",
+		"  active version: 1.2.3\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestRunStatusPackageNotInstalled(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	app := App{
@@ -460,6 +492,44 @@ func TestPackageInitJSONUsesExistingManifestFields(t *testing.T) {
 	}
 }
 
+func TestPackageInitHumanReadableSummary(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "OTTO", "Embedded Family", "Bold Italic", 700, true)
+	if err := os.WriteFile(filepath.Join(root, "dist", "Misleading-Regular.otf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root}); code != 0 {
+		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Repository: " + root,
+		"Discovered assets:\n",
+		"Misleading-Regular.otf [otf] style=italic (embedded metadata) weight=700 (embedded metadata)",
+		"family=Embedded Family (embedded metadata)",
+		"Manifest fields:\n",
+		"name: Embedded Family (embedded metadata)",
+		"author: Example Studio (user input)",
+		"version: 1.2.3 (user input)",
+		"Unresolved fields: none",
+		"Candidate fontpub.json:\n",
+		`"name":"Embedded Family"`,
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package init output missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestPackageInitJSONPrefersEmbeddedMetadata(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
@@ -669,6 +739,32 @@ func TestPackageInspectJSON(t *testing.T) {
 	}
 	if env.Data["style"] != "italic" || int(env.Data["weight"].(float64)) != 700 {
 		t.Fatalf("unexpected inspect data: %#v", env.Data)
+	}
+}
+
+func TestPackageInspectHumanReadable(t *testing.T) {
+	root := t.TempDir()
+	fontPath := filepath.Join(root, "Misleading-Regular.otf")
+	fontBody := buildTestSFNT(t, "OTTO", "Embedded Family", "Bold Italic", 700, true)
+	if err := os.WriteFile(fontPath, fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "inspect", fontPath}); code != 0 {
+		t.Fatalf("package inspect code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Path: " + fontPath,
+		"Format: otf",
+		"Family: Embedded Family (embedded metadata)",
+		"Style: italic (embedded metadata)",
+		"Weight: 700 (embedded metadata)",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package inspect output missing %q\n%s", want, output)
+		}
 	}
 }
 
