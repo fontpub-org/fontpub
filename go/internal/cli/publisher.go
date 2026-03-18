@@ -900,6 +900,7 @@ name: Fontpub
 on:
   push:
     tags:
+      - "[0-9]*"
       - "v*"
       - "V*"
   workflow_dispatch:
@@ -927,8 +928,8 @@ jobs:
               echo "::error::workflow_dispatch requires a tag input"
               exit 1
             fi
-            if ! printf '%%s\n' "${TAG}" | grep -Eq '^[vV](0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*$'; then
-              echo "::error::tag must match Fontpub versioning (example: v1.2.3)"
+            if ! printf '%%s\n' "${TAG}" | grep -Eq '^[vV]?(0|[1-9][0-9]*)(\.[0-9]+)*$'; then
+              echo "::error::tag must match Fontpub versioning (example: 1.002 or v1.2.3)"
               exit 1
             fi
             echo "ref=refs/tags/${TAG}" >> "$GITHUB_OUTPUT"

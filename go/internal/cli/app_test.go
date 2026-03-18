@@ -929,10 +929,11 @@ func TestWorkflowInitDryRunAndWrite(t *testing.T) {
 	text := string(body)
 	for _, want := range []string{
 		`workflow_dispatch:`,
+		`- "[0-9]*"`,
 		`fetch-depth: 0`,
 		`persist-credentials: false`,
 		`git rev-parse --verify "${{ steps.ref.outputs.ref }}^{commit}"`,
-		`grep -Eq '^[vV](0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*$'`,
+		`grep -Eq '^[vV]?(0|[1-9][0-9]*)(\.[0-9]+)*$'`,
 		`ACTIONS_ID_TOKEN_REQUEST_URL`,
 		`https://fontpub.org/v1/update`,
 	} {
