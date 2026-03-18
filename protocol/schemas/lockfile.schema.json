@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fontpub.org/schemas/v1/lockfile.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "packages"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "generated_at": { "type": "string" },
+    "packages": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["installed_versions"],
+        "properties": {
+          "active_version_key": { "type": ["string", "null"] },
+          "installed_versions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["version", "version_key", "installed_at", "assets"],
+              "properties": {
+                "version": { "type": "string" },
+                "version_key": { "type": "string" },
+                "installed_at": { "type": "string" },
+                "assets": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["path", "sha256", "local_path", "active"],
+                    "properties": {
+                      "path": { "type": "string" },
+                      "sha256": { "type": "string" },
+                      "local_path": { "type": "string" },
+                      "active": { "type": "boolean" },
+                      "symlink_path": { "type": ["string", "null"] }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

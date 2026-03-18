@@ -1,0 +1,71 @@
+{
+  "valid": [
+    {
+      "name": "basic",
+      "manifest": {
+        "name": "Example Sans",
+        "author": "Example Studio",
+        "version": "1.2.3",
+        "license": "OFL-1.1",
+        "files": [
+          { "path": "dist/ExampleSans-Regular.otf", "style": "normal", "weight": 400 },
+          { "path": "dist/ExampleSans-Italic.otf", "style": "italic", "weight": 400 }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "missing_author",
+      "manifest": {
+        "name": "Example Sans",
+        "version": "1.2.3",
+        "license": "OFL-1.1",
+        "files": [
+          { "path": "dist/ExampleSans-Regular.otf", "style": "normal", "weight": 400 }
+        ]
+      },
+      "error": "MANIFEST_SCHEMA_INVALID"
+    },
+    {
+      "name": "invalid_license",
+      "manifest": {
+        "name": "Example Sans",
+        "author": "Example Studio",
+        "version": "1.2.3",
+        "license": "MIT",
+        "files": [
+          { "path": "dist/ExampleSans-Regular.otf", "style": "normal", "weight": 400 }
+        ]
+      },
+      "error": "LICENSE_NOT_ALLOWED"
+    },
+    {
+      "name": "duplicate_path",
+      "manifest": {
+        "name": "Example Sans",
+        "author": "Example Studio",
+        "version": "1.2.3",
+        "license": "OFL-1.1",
+        "files": [
+          { "path": "dist/ExampleSans-Regular.otf", "style": "normal", "weight": 400 },
+          { "path": "dist/ExampleSans-Regular.otf", "style": "italic", "weight": 400 }
+        ]
+      },
+      "error": "ASSET_DUPLICATE_PATH"
+    },
+    {
+      "name": "invalid_version",
+      "manifest": {
+        "name": "Example Sans",
+        "author": "Example Studio",
+        "version": "01.2.3",
+        "license": "OFL-1.1",
+        "files": [
+          { "path": "dist/ExampleSans-Regular.otf", "style": "normal", "weight": 400 }
+        ]
+      },
+      "error": "VERSION_INVALID"
+    }
+  ]
+}

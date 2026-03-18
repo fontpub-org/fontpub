@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fontpub.org/schemas/v1/versioned-package-detail.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "package_id", "display_name", "author", "license", "version", "version_key", "published_at", "github", "manifest_url", "assets"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "package_id": { "type": "string" },
+    "display_name": { "type": "string" },
+    "author": { "type": "string" },
+    "license": { "const": "OFL-1.1" },
+    "version": { "type": "string" },
+    "version_key": { "type": "string" },
+    "published_at": { "type": "string" },
+    "manifest_url": { "type": "string" },
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "repo", "sha"],
+      "properties": {
+        "owner": { "type": "string" },
+        "repo": { "type": "string" },
+        "sha": { "type": "string" }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "url", "sha256", "format", "style", "weight", "size_bytes"],
+        "properties": {
+          "path": { "type": "string" },
+          "url": { "type": "string" },
+          "sha256": { "type": "string" },
+          "format": { "enum": ["otf", "ttf", "woff2"] },
+          "style": { "enum": ["normal", "italic", "oblique"] },
+          "weight": { "type": "integer", "minimum": 1, "maximum": 1000 },
+          "size_bytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

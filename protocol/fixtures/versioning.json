@@ -1,0 +1,22 @@
+{
+  "valid": [
+    { "input": "1", "version_key": "1" },
+    { "input": "1.0", "version_key": "1" },
+    { "input": "1.0.0", "version_key": "1" },
+    { "input": "v2.10.0", "version_key": "2.10" },
+    { "input": "0.100", "version_key": "0.100" }
+  ],
+  "invalid": [
+    "01.2",
+    "1.02",
+    "1.2-alpha",
+    "1..2",
+    "1.2."
+  ],
+  "precedence": [
+    { "left": "1", "right": "1.0", "cmp": 0 },
+    { "left": "1.500", "right": "1.5", "cmp": 1 },
+    { "left": "2.0", "right": "1.999.999", "cmp": 1 },
+    { "left": "1.2", "right": "1.2.1", "cmp": -1 }
+  ]
+}

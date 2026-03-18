@@ -1,0 +1,14 @@
+{
+  "valid": [
+    "dist/ExampleSans-Regular.otf",
+    "fonts/ExampleSans-Italic.ttf",
+    "web/ExampleSans.woff2"
+  ],
+  "invalid": [
+    { "path": "/absolute.otf", "error": "ASSET_PATH_INVALID" },
+    { "path": "dist//double.otf", "error": "ASSET_PATH_INVALID" },
+    { "path": "dist/../escape.otf", "error": "ASSET_PATH_INVALID" },
+    { "path": "dist/trailing/", "error": "ASSET_PATH_INVALID" },
+    { "path": "dist/bad:name.otf", "error": "ASSET_PATH_INVALID" }
+  ]
+}
