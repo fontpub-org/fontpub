@@ -10,6 +10,27 @@ This document defines command behavior and on-disk layout.
 
 ## Interaction model
 
+### Help output
+
+The CLI MUST support help output via `--help`.
+
+At minimum, the following forms MUST be supported:
+- `fontpub --help`
+- `fontpub <command> --help`
+- `fontpub package --help`
+- `fontpub package <subcommand> --help`
+- `fontpub workflow --help`
+- `fontpub workflow <subcommand> --help`
+
+Help output is human-oriented usage text.
+
+Rules:
+- `--help` MUST print usage information for the selected command or command group and exit successfully without performing the command.
+- `--help` MUST write human-readable help text to stdout.
+- `--help` MUST take precedence over normal command execution.
+- `--help` output is not part of the CLI JSON contract and MUST NOT require `--json`.
+- Implementations MAY support `help` as an alias, but `--help` is the normative interface in v1.
+
 ### Human-oriented behavior
 
 When stdout and stderr are attached to a TTY, commands MAY present:
