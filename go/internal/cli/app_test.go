@@ -170,6 +170,35 @@ func TestRunStatusPackageNotInstalled(t *testing.T) {
 	}
 }
 
+func TestHelpOutput(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"--help"}, want: "Usage:\n  fontpub <command> [options]"},
+		{args: []string{"show", "--help"}, want: "Usage:\n  fontpub show <owner>/<repo> [--version <v>] [--json]"},
+		{args: []string{"package", "--help"}, want: "Usage:\n  fontpub package <subcommand> [options]"},
+		{args: []string{"package", "init", "--help"}, want: "Usage:\n  fontpub package init [PATH] [--write] [--dry-run] [--yes] [--json]"},
+		{args: []string{"workflow", "init", "--help"}, want: "Usage:\n  fontpub workflow init [PATH] [--dry-run] [--yes] [--json]"},
+		{args: []string{"status", "--json", "--help"}, want: "Usage:\n  fontpub status [<owner>/<repo>] [--activation-dir <path>] [--json]"},
+	}
+	for _, tc := range tests {
+		t.Run(strings.Join(tc.args, "_"), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+			if code := app.Run(context.Background(), tc.args); code != 0 {
+				t.Fatalf("Run(%v) code=%d stderr=%s", tc.args, code, stderr.String())
+			}
+			if got := stdout.String(); !strings.Contains(got, tc.want) {
+				t.Fatalf("help output mismatch\nwant substring: %q\ngot: %s", tc.want, got)
+			}
+			if strings.HasPrefix(strings.TrimSpace(stdout.String()), "{") {
+				t.Fatalf("help output must be human-readable, got JSON: %s", stdout.String())
+			}
+		})
+	}
+}
+
 func TestInstallActivateVerifyRepairAndUninstall(t *testing.T) {
 	stateDir := t.TempDir()
 	activationDir := t.TempDir()
