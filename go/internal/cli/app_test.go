@@ -771,6 +771,50 @@ func TestPackageInitJSONPrefersEmbeddedMetadata(t *testing.T) {
 	}
 }
 
+func TestPackageInitJSONResolvesNameAcrossEmbeddedAndWOFF2Heuristics(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "fonts", "static"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "OTTO", "Zx Gamut", "Bold", 700, false)
+	if err := os.WriteFile(filepath.Join(root, "fonts", "static", "ZxGamut-Bold.otf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile otf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fonts", "static", "ZxGamut-Regular.woff2"), []byte("woff2-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile woff2: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--json"}); code != 0 {
+		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if err := protocol.ValidatePackageInitResult(env); err != nil {
+		t.Fatalf("ValidatePackageInitResult: %v", err)
+	}
+	manifestData, ok := env.Data["manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected manifest data: %#v", env.Data["manifest"])
+	}
+	if manifestData["name"] != "Zx Gamut" {
+		t.Fatalf("unexpected manifest name: %#v", manifestData["name"])
+	}
+	unresolved, ok := env.Data["unresolved_fields"].([]any)
+	if !ok {
+		t.Fatalf("unexpected unresolved fields: %#v", env.Data["unresolved_fields"])
+	}
+	if len(unresolved) != 0 {
+		t.Fatalf("expected no unresolved fields, got %#v", unresolved)
+	}
+}
+
 func TestPackagePreviewJSON(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {

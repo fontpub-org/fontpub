@@ -589,9 +589,60 @@ func inferFromFilename(path string) (string, int, string) {
 			break
 		}
 	}
+	name = stripVariableAxisSuffix(name)
 	name = strings.ReplaceAll(name, "-", " ")
+	name = strings.ReplaceAll(name, "_", " ")
+	name = splitCamelCaseName(name)
 	name = strings.TrimSpace(name)
 	return style, weight, name
+}
+
+func stripVariableAxisSuffix(name string) string {
+	if idx := strings.Index(name, "["); idx > 0 && strings.HasSuffix(name, "]") {
+		return name[:idx]
+	}
+	return name
+}
+
+func splitCamelCaseName(name string) string {
+	if name == "" {
+		return name
+	}
+	runes := []rune(name)
+	out := make([]rune, 0, len(runes)+4)
+	for i, r := range runes {
+		if i > 0 && shouldInsertNameSpace(runes, i) {
+			out = append(out, ' ')
+		}
+		out = append(out, r)
+	}
+	return string(out)
+}
+
+func shouldInsertNameSpace(runes []rune, idx int) bool {
+	prev := runes[idx-1]
+	current := runes[idx]
+	if prev == ' ' || current == ' ' {
+		return false
+	}
+	if prev >= '0' && prev <= '9' {
+		return false
+	}
+	if idx > 1 {
+		beforePrev := runes[idx-2]
+		if beforePrev >= '0' && beforePrev <= '9' {
+			return false
+		}
+	}
+	return isLowerASCII(prev) && isUpperASCII(current)
+}
+
+func isLowerASCII(r rune) bool {
+	return r >= 'a' && r <= 'z'
+}
+
+func isUpperASCII(r rune) bool {
+	return r >= 'A' && r <= 'Z'
 }
 
 func unresolvedFields(manifest protocol.Manifest) []string {
