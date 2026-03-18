@@ -31,7 +31,7 @@ This file is the implementation guide for coding agents. It is the source of tru
   - transient coordination needed to publish safely
 - `fontpub.json` fields are all required.
 - `license` is only `"OFL-1.1"`.
-- Version strings are Numeric Dot and must not contain leading zeros in any non-zero segment.
+- Version strings are Numeric Dot; the major segment must not have a leading zero, and subsequent segments may preserve leading zeros.
 - Do not store font binaries in Fontpub-managed storage.
 
 ### MUST NOT

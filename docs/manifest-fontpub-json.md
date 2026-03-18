@@ -39,6 +39,7 @@ Must follow the v1 Numeric Dot rules.
 
 - The manifest stores the package's literal version string.
 - The Indexer MUST derive the package's `version_key` from this string as defined in `versioning.md`.
+- Common open font versions such as `1.002` are valid in v1.
 
 ### `license` (required)
 Must be the literal string: `OFL-1.1`.
@@ -77,7 +78,7 @@ Additional rules:
 {
   "name": "Example Sans",
   "author": "Example Studio",
-  "version": "1.2.3",
+  "version": "1.002",
   "license": "OFL-1.1",
   "files": [
     { "path": "dist/ExampleSans-Regular.otf", "style": "normal", "weight": 400 },
