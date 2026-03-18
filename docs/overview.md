@@ -8,6 +8,7 @@ Recommended implementation architecture is described in `architecture.md`.
 CLI machine-readable behavior is described in `cli-json.md`.
 Expected GitHub Actions publication workflow is described in `publisher-workflow.md`.
 CLI JSON is part of the protocol surface and should be backed by schemas and conformance fixtures in `protocol/`.
+Practical local usage is described in `quickstart.md`.
 
 ## Components
 

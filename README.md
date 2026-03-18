@@ -33,3 +33,28 @@ The future of software is collaborative, and that includes collaboration with to
 ---
 
 The era of static fonts is over. Join the protocol.
+
+## Try It
+
+If you want to try the current implementation locally, start with the quickstart:
+
+- [Quickstart](./docs/quickstart.md)
+
+For a publisher workflow, the shortest path is:
+
+```bash
+cd go
+go run ./cmd/fontpub package init /path/to/font-repo --write
+go run ./cmd/fontpub package validate /path/to/font-repo --json
+go run ./cmd/fontpub package preview /path/to/font-repo --package-id owner/repo --json
+go run ./cmd/fontpub workflow init /path/to/font-repo --yes
+```
+
+The CLI also supports `--help`, for example:
+
+```bash
+cd go
+go run ./cmd/fontpub --help
+go run ./cmd/fontpub package --help
+go run ./cmd/fontpub package init --help
+```
