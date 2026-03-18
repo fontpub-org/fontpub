@@ -436,6 +436,68 @@ func TestPackageInitJSONUsesExistingManifestFields(t *testing.T) {
 	}
 }
 
+func TestPackageInitJSONPrefersEmbeddedMetadata(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "OTTO", "Embedded Family", "Bold Italic", 700, true)
+	if err := os.WriteFile(filepath.Join(root, "dist", "Misleading-Regular.otf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--json"}); code != 0 {
+		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if err := protocol.ValidatePackageInitResult(env); err != nil {
+		t.Fatalf("ValidatePackageInitResult: %v", err)
+	}
+	manifestData, ok := env.Data["manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected manifest data: %#v", env.Data["manifest"])
+	}
+	if manifestData["name"] != "Embedded Family" {
+		t.Fatalf("unexpected manifest name: %#v", manifestData["name"])
+	}
+	files, ok := manifestData["files"].([]any)
+	if !ok || len(files) != 1 {
+		t.Fatalf("unexpected files: %#v", manifestData["files"])
+	}
+	fileData, ok := files[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected file data: %#v", files[0])
+	}
+	if fileData["style"] != "italic" || int(fileData["weight"].(float64)) != 700 {
+		t.Fatalf("unexpected inferred file data: %#v", fileData)
+	}
+	inferences, ok := env.Data["inferences"].([]any)
+	if !ok {
+		t.Fatalf("unexpected inferences: %#v", env.Data["inferences"])
+	}
+	sources := map[string]string{}
+	for _, raw := range inferences {
+		record, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected inference record: %#v", raw)
+		}
+		field, _ := record["field"].(string)
+		source, _ := record["source"].(string)
+		sources[field] = source
+	}
+	if sources["files[0].style"] != "embedded_metadata" || sources["files[0].weight"] != "embedded_metadata" || sources["name"] != "embedded_metadata" {
+		t.Fatalf("unexpected inference sources: %#v", sources)
+	}
+}
+
 func TestPackagePreviewJSON(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
@@ -553,6 +615,27 @@ func TestPackageInspectJSON(t *testing.T) {
 		t.Fatalf("json.Unmarshal inspect: %v", err)
 	}
 	if env.Data["style"] != "italic" || int(env.Data["weight"].(float64)) != 700 {
+		t.Fatalf("unexpected inspect data: %#v", env.Data)
+	}
+}
+
+func TestPackageInspectJSONPrefersEmbeddedMetadata(t *testing.T) {
+	root := t.TempDir()
+	fontPath := filepath.Join(root, "Misleading-Regular.otf")
+	fontBody := buildTestSFNT(t, "OTTO", "Embedded Family", "Bold Italic", 700, true)
+	if err := os.WriteFile(fontPath, fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "inspect", fontPath, "--json"}); code != 0 {
+		t.Fatalf("package inspect code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal inspect: %v", err)
+	}
+	if env.Data["name"] != "Embedded Family" || env.Data["style"] != "italic" || int(env.Data["weight"].(float64)) != 700 {
 		t.Fatalf("unexpected inspect data: %#v", env.Data)
 	}
 }

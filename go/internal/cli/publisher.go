@@ -29,6 +29,10 @@ type inspection struct {
 	Style  string `json:"style"`
 	Weight int    `json:"weight"`
 	Name   string `json:"name,omitempty"`
+
+	styleSource  string
+	weightSource string
+	nameSource   string
 }
 
 func (a *App) runPackage(ctx context.Context, args []string) int {
@@ -313,8 +317,8 @@ func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inferenc
 	for i, asset := range assets {
 		files = append(files, protocol.ManifestFile{Path: asset.Path, Style: asset.Style, Weight: asset.Weight})
 		inferences = append(inferences,
-			inferenceRecord{Field: fmt.Sprintf("files[%d].style", i), Value: asset.Style, Source: "filename_heuristic"},
-			inferenceRecord{Field: fmt.Sprintf("files[%d].weight", i), Value: asset.Weight, Source: "filename_heuristic"},
+			inferenceRecord{Field: fmt.Sprintf("files[%d].style", i), Value: asset.Style, Source: asset.styleSource},
+			inferenceRecord{Field: fmt.Sprintf("files[%d].weight", i), Value: asset.Weight, Source: asset.weightSource},
 		)
 		if asset.Name != "" {
 			nameCandidates = append(nameCandidates, asset.Name)
@@ -347,7 +351,7 @@ func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inferenc
 		name := commonName(nameCandidates)
 		if name != "" {
 			manifest.Name = name
-			inferences = append(inferences, inferenceRecord{Field: "name", Value: name, Source: "filename_heuristic"})
+			inferences = append(inferences, inferenceRecord{Field: "name", Value: name, Source: commonNameSource(assets)})
 		}
 	}
 	return manifest, inferences, unresolvedFields(manifest), nil
@@ -475,14 +479,11 @@ func scanFontAssets(root string) ([]inspection, error) {
 		if err != nil {
 			return nil
 		}
-		style, weight, name := inferFromFilename(rel)
-		out = append(out, inspection{
-			Path:   rel,
-			Format: format,
-			Style:  style,
-			Weight: weight,
-			Name:   name,
-		})
+		info, err := inspectFontFile(path, rel, format)
+		if err != nil {
+			return err
+		}
+		out = append(out, info)
 		return nil
 	})
 	if err != nil {
@@ -494,18 +495,53 @@ func scanFontAssets(root string) ([]inspection, error) {
 
 func inspectFontPath(path, root string) (inspection, error) {
 	rel := path
+	fullPath := path
 	if !filepath.IsAbs(path) {
 		rel = filepath.ToSlash(path)
+		fullPath = filepath.Join(root, filepath.FromSlash(rel))
 	}
-	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil && !filepath.IsAbs(path) {
+	if _, err := os.Stat(fullPath); err != nil {
 		return inspection{}, &CLIError{Code: "LOCAL_FILE_MISSING", Message: "font file does not exist", Details: map[string]any{"path": path}}
 	}
 	format, err := protocol.FormatFromPath(rel)
 	if err != nil {
 		return inspection{}, protocolErrorToCLI(err)
 	}
-	style, weight, name := inferFromFilename(rel)
-	return inspection{Path: rel, Format: format, Style: style, Weight: weight, Name: name}, nil
+	return inspectFontFile(fullPath, rel, format)
+}
+
+func inspectFontFile(fullPath, relPath, format string) (inspection, error) {
+	style, weight, name := inferFromFilename(relPath)
+	info := inspection{
+		Path:         relPath,
+		Format:       format,
+		Style:        style,
+		Weight:       weight,
+		Name:         name,
+		styleSource:  "filename_heuristic",
+		weightSource: "filename_heuristic",
+		nameSource:   "filename_heuristic",
+	}
+
+	body, err := os.ReadFile(fullPath)
+	if err != nil {
+		return inspection{}, &CLIError{Code: "INTERNAL_ERROR", Message: "could not read font file", Details: map[string]any{"path": relPath, "reason": err.Error()}}
+	}
+	if meta, ok := parseEmbeddedFontMetadata(relPath, body); ok {
+		if meta.Style != "" {
+			info.Style = meta.Style
+			info.styleSource = "embedded_metadata"
+		}
+		if meta.Weight > 0 {
+			info.Weight = meta.Weight
+			info.weightSource = "embedded_metadata"
+		}
+		if meta.Family != "" {
+			info.Name = meta.Family
+			info.nameSource = "embedded_metadata"
+		}
+	}
+	return info, nil
 }
 
 func inferFromFilename(path string) (string, int, string) {
@@ -575,6 +611,29 @@ func commonName(values []string) string {
 		return ""
 	}
 	return first
+}
+
+func commonNameSource(assets []inspection) string {
+	if len(assets) == 0 {
+		return "filename_heuristic"
+	}
+	source := ""
+	for _, asset := range assets {
+		if asset.Name == "" {
+			continue
+		}
+		if source == "" {
+			source = asset.nameSource
+			continue
+		}
+		if source != asset.nameSource {
+			return "filename_heuristic"
+		}
+	}
+	if source == "" {
+		return "filename_heuristic"
+	}
+	return source
 }
 
 func oneOptionalPath(args []string) (string, *CLIError) {
