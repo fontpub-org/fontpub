@@ -169,11 +169,24 @@ FONTPUB_ARTIFACTS_DIR=/path/to/artifacts go run ./cmd/fontpub-rebuilder
 ```bash
 cd go
 FONTPUB_ARTIFACTS_DIR=/path/to/artifacts \
+FONTPUB_STATE_BACKEND=file \
+FONTPUB_STATE_DIR=/path/to/state \
 FONTPUB_GITHUB_JWKS_JSON='{"keys":[...]}' \
 go run ./cmd/fontpub-indexer
 ```
 
 The Indexer expects GitHub Actions OIDC-compatible JWT verification material and an artifacts directory for public JSON documents.
+
+For local development, the Indexer defaults to an in-memory private-state backend. That is convenient for tests, but replay protection and package ownership bindings are lost when the process exits.
+
+For a minimum persistent setup, use:
+
+```bash
+export FONTPUB_STATE_BACKEND=file
+export FONTPUB_STATE_DIR=/path/to/state
+```
+
+This keeps JWT replay state and `package_id -> repository_id` ownership bindings across restarts.
 
 For production-like operation, `fontpub-indexer` can fetch GitHub's JWKS remotely instead of requiring `FONTPUB_GITHUB_JWKS_JSON`.
 
@@ -219,7 +232,10 @@ With those variables set, the binaries can be started the same way:
 
 ```bash
 cd go
-FONTPUB_GITHUB_JWKS_JSON='{"keys":[...]}' go run ./cmd/fontpub-indexer
+FONTPUB_STATE_BACKEND=file \
+FONTPUB_STATE_DIR=/path/to/state \
+FONTPUB_GITHUB_JWKS_JSON='{"keys":[...]}' \
+go run ./cmd/fontpub-indexer
 go run ./cmd/fontpub-rebuilder
 ```
 

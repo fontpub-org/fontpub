@@ -112,6 +112,8 @@ The write plane should be stateful and small:
 - publication sequencing
 - ownership and replay checks
 
+For local development, an in-memory private-state backend is acceptable. For any operator workflow that expects restart-safe replay protection and ownership binding, use a durable private-state backend.
+
 The read plane must not depend on the write plane to serve already-published metadata.
 
 ## Publication model
@@ -152,5 +154,7 @@ These are recommendations, not protocol requirements:
 - Rebuilder: Go
 - Public artifact store: S3-compatible or R2-like object storage
 - Private state store: a small durable store suitable for ownership and replay tracking
+  - a file-backed store is a reasonable minimum implementation
+  - a memory-backed store is appropriate for tests and ephemeral local runs
 
 The key requirement is not the product choice. The key requirement is preserving the authoritative role of public immutable metadata.

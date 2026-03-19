@@ -344,7 +344,7 @@ If any of the following are unclear, do not invent behavior. Add or update a tes
 
 Current local operator commands:
 - `FONTPUB_ARTIFACTS_DIR=/path/to/artifacts go run ./cmd/fontpub-rebuilder`
-- `FONTPUB_ARTIFACTS_DIR=/path/to/artifacts FONTPUB_GITHUB_JWKS_JSON='{\"keys\":[...]}' go run ./cmd/fontpub-indexer`
+- `FONTPUB_ARTIFACTS_DIR=/path/to/artifacts FONTPUB_STATE_BACKEND=file FONTPUB_STATE_DIR=/path/to/state FONTPUB_GITHUB_JWKS_JSON='{\"keys\":[...]}' go run ./cmd/fontpub-indexer`
 
 ---
 
