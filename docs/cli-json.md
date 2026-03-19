@@ -192,6 +192,7 @@ Example:
 `data` MUST contain:
 - `manifest`
 - `inferences`
+- `conflicts`
 - `unresolved_fields`
 
 `inferences` MUST be an array of inference records describing how candidate values were determined.
@@ -208,6 +209,20 @@ Each inference record MUST contain:
 
 `unresolved_fields` MUST be an array of required manifest field names that still need user input.
 
+`conflicts` MUST be an array of manifest-field conflict records.
+
+Each conflict record MUST contain:
+- `field`
+- `resolved`
+- `candidates`
+
+Each candidate object in `candidates` MUST contain:
+- `value`
+- `source`
+
+If `resolved` is `true`, the conflict record MUST also contain:
+- `chosen_value`
+
 ```json
 {
   "schema_version": "1",
@@ -222,6 +237,7 @@ Each inference record MUST contain:
       "files": []
     },
     "inferences": [],
+    "conflicts": [],
     "unresolved_fields": []
   }
 }

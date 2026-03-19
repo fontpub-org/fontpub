@@ -181,6 +181,7 @@ The CLI has two top-level command groups:
 - In human-readable mode, the CLI MUST summarize:
   - discovered asset files
   - inferred manifest fields
+  - conflicting candidate values, if any
   - unresolved required fields, if any
 - Ask for missing required manifest fields when running interactively
 - Output a candidate `fontpub.json`

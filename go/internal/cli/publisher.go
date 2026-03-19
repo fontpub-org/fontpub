@@ -23,6 +23,18 @@ type inferenceRecord struct {
 	Source string `json:"source"`
 }
 
+type conflictCandidate struct {
+	Value  string `json:"value"`
+	Source string `json:"source"`
+}
+
+type conflictRecord struct {
+	Field       string              `json:"field"`
+	Resolved    bool                `json:"resolved"`
+	ChosenValue string              `json:"chosen_value,omitempty"`
+	Candidates  []conflictCandidate `json:"candidates"`
+}
+
 type inspection struct {
 	Path   string `json:"path"`
 	Format string `json:"format"`
@@ -85,7 +97,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		return a.fail("package init", errObj)
 	}
 
-	manifest, assets, inferences, unresolved, err := a.buildCandidateManifest(root)
+	manifest, assets, inferences, conflicts, unresolved, err := a.buildCandidateManifest(root)
 	if err != nil {
 		return a.fail("package init", asCLIError(err))
 	}
@@ -104,12 +116,13 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 	}
 
 	if !a.JSON {
-		printPackageInitSummary(a.Stdout, root, manifest, assets, inferences, unresolved)
+		printPackageInitSummary(a.Stdout, root, manifest, assets, inferences, conflicts, unresolved)
 	}
 
 	data := map[string]any{
 		"manifest":          mustMap(manifest),
 		"inferences":        inferenceRecordsToAny(inferences),
+		"conflicts":         conflictRecordsToAny(conflicts),
 		"unresolved_fields": stringSliceToAny(unresolved),
 	}
 	if a.JSON {
@@ -312,17 +325,18 @@ func (a *App) runWorkflowInit(_ context.Context, args []string) int {
 	return 0
 }
 
-func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inspection, []inferenceRecord, []string, error) {
+func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inspection, []inferenceRecord, []conflictRecord, []string, error) {
 	assets, err := scanFontAssets(root)
 	if err != nil {
-		return protocol.Manifest{}, nil, nil, nil, err
+		return protocol.Manifest{}, nil, nil, nil, nil, err
 	}
 	assets = applyStemGrouping(assets)
 	if len(assets) == 0 {
-		return protocol.Manifest{}, nil, nil, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "no distributable font files found", Details: map[string]any{"root_path": root}}
+		return protocol.Manifest{}, nil, nil, nil, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "no distributable font files found", Details: map[string]any{"root_path": root}}
 	}
 	files := make([]protocol.ManifestFile, 0, len(assets))
 	inferences := make([]inferenceRecord, 0)
+	conflicts := make([]conflictRecord, 0)
 	nameCandidates := make([]string, 0)
 	for i, asset := range assets {
 		files = append(files, protocol.ManifestFile{Path: asset.Path, Style: asset.Style, Weight: asset.Weight})
@@ -362,21 +376,32 @@ func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inspecti
 		if name != "" {
 			manifest.Name = name
 			inferences = append(inferences, inferenceRecord{Field: "name", Value: name, Source: commonNameSource(assets)})
+		} else if conflict := detectNameConflict(assets); len(conflict.Candidates) > 0 {
+			conflicts = append(conflicts, conflict)
 		}
 	}
 	if manifest.Author == "" {
-		if author, source := inferAuthorFromRepository(root); author != "" {
+		author, source, authorConflict := inferAuthorFromRepository(root)
+		if len(authorConflict.Candidates) > 0 {
+			conflicts = append(conflicts, authorConflict)
+		}
+		if author != "" {
 			manifest.Author = author
 			inferences = append(inferences, inferenceRecord{Field: "author", Value: author, Source: source})
 		}
 	}
 	if manifest.Version == "" {
-		if version, source := inferVersionFromRepository(root); version != "" {
+		version, source, versionConflict := inferVersionFromRepository(root)
+		if len(versionConflict.Candidates) > 0 {
+			conflicts = append(conflicts, versionConflict)
+		}
+		if version != "" {
 			manifest.Version = version
 			inferences = append(inferences, inferenceRecord{Field: "version", Value: version, Source: source})
 		}
 	}
-	return manifest, assets, inferences, unresolvedFields(manifest), nil
+	conflicts = finalizeConflicts(conflicts, manifest)
+	return manifest, assets, inferences, conflicts, unresolvedFields(manifest), nil
 }
 
 func (a *App) buildCandidatePackageDetail(root, explicitPackageID string) (protocol.CandidatePackageDetail, error) {
@@ -831,17 +856,18 @@ func commonNameSource(assets []inspection) string {
 	return source
 }
 
-func inferAuthorFromRepository(root string) (string, string) {
+func inferAuthorFromRepository(root string) (string, string, conflictRecord) {
+	candidates := make([]conflictCandidate, 0, 2)
 	if author, ok := inferAuthorFromREADME(root); ok {
-		return author, "repository_readme"
+		candidates = append(candidates, conflictCandidate{Value: author, Source: "repository_readme"})
 	}
 	if packageID, err := derivePackageID(root, ""); err == nil {
 		parts := strings.SplitN(packageID, "/", 2)
 		if len(parts) == 2 && parts[0] != "" {
-			return parts[0], "repository_owner"
+			candidates = append(candidates, conflictCandidate{Value: parts[0], Source: "repository_owner"})
 		}
 	}
-	return "", ""
+	return chooseRepositoryCandidate("author", candidates)
 }
 
 func inferAuthorFromREADME(root string) (string, bool) {
@@ -871,14 +897,15 @@ func inferAuthorFromREADME(root string) (string, bool) {
 	return "", false
 }
 
-func inferVersionFromRepository(root string) (string, string) {
+func inferVersionFromRepository(root string) (string, string, conflictRecord) {
+	candidates := make([]conflictCandidate, 0, 2)
 	if version, ok := inferVersionFromChangelog(root); ok {
-		return version, "repository_changelog"
+		candidates = append(candidates, conflictCandidate{Value: version, Source: "repository_changelog"})
 	}
 	if version, ok := inferVersionFromGitTags(root); ok {
-		return version, "repository_tag"
+		candidates = append(candidates, conflictCandidate{Value: version, Source: "repository_tag"})
 	}
-	return "", ""
+	return chooseRepositoryCandidate("version", candidates)
 }
 
 func inferVersionFromChangelog(root string) (string, bool) {
@@ -932,7 +959,7 @@ func inferVersionFromGitTags(root string) (string, bool) {
 	return best, best != ""
 }
 
-func printPackageInitSummary(w io.Writer, root string, manifest protocol.Manifest, assets []inspection, inferences []inferenceRecord, unresolved []string) {
+func printPackageInitSummary(w io.Writer, root string, manifest protocol.Manifest, assets []inspection, inferences []inferenceRecord, conflicts []conflictRecord, unresolved []string) {
 	fmt.Fprintf(w, "Repository: %s\n", root)
 	fmt.Fprintln(w, "Discovered assets:")
 	for _, asset := range assets {
@@ -961,6 +988,25 @@ func printPackageInitSummary(w io.Writer, root string, manifest protocol.Manifes
 	printManifestFieldSummary(w, "author", manifest.Author, inferenceByField["author"])
 	printManifestFieldSummary(w, "version", manifest.Version, inferenceByField["version"])
 	printManifestFieldSummary(w, "license", manifest.License, inferenceByField["license"])
+
+	if len(conflicts) == 0 {
+		fmt.Fprintln(w, "Conflicts: none")
+	} else {
+		fmt.Fprintln(w, "Conflicts:")
+		for _, conflict := range conflicts {
+			status := "unresolved"
+			if conflict.Resolved {
+				status = "resolved"
+			}
+			fmt.Fprintf(w, "  %s (%s)\n", conflict.Field, status)
+			if conflict.Resolved && conflict.ChosenValue != "" {
+				fmt.Fprintf(w, "    chosen: %s\n", conflict.ChosenValue)
+			}
+			for _, candidate := range conflict.Candidates {
+				fmt.Fprintf(w, "    - %s (%s)\n", candidate.Value, humanizeInferenceSource(candidate.Source))
+			}
+		}
+	}
 
 	if len(unresolved) == 0 {
 		fmt.Fprintln(w, "Unresolved fields: none")
@@ -1113,6 +1159,29 @@ func inferenceRecordsToAny(records []inferenceRecord) []any {
 	return out
 }
 
+func conflictRecordsToAny(records []conflictRecord) []any {
+	out := make([]any, 0, len(records))
+	for _, record := range records {
+		candidates := make([]any, 0, len(record.Candidates))
+		for _, candidate := range record.Candidates {
+			candidates = append(candidates, map[string]any{
+				"value":  candidate.Value,
+				"source": candidate.Source,
+			})
+		}
+		item := map[string]any{
+			"field":      record.Field,
+			"resolved":   record.Resolved,
+			"candidates": candidates,
+		}
+		if record.Resolved && record.ChosenValue != "" {
+			item["chosen_value"] = record.ChosenValue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
 func stringSliceToAny(values []string) []any {
 	out := make([]any, 0, len(values))
 	for _, value := range values {
@@ -1125,6 +1194,103 @@ func mustMap(value any) map[string]any {
 	body, _ := json.Marshal(value)
 	out := map[string]any{}
 	_ = json.Unmarshal(body, &out)
+	return out
+}
+
+func detectNameConflict(assets []inspection) conflictRecord {
+	seen := map[string]string{}
+	ordered := make([]conflictCandidate, 0)
+	for _, asset := range assets {
+		name := strings.TrimSpace(asset.Name)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name) + "\x00" + asset.nameSource
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = name
+		ordered = append(ordered, conflictCandidate{Value: name, Source: asset.nameSource})
+	}
+	distinct := map[string]struct{}{}
+	for _, candidate := range ordered {
+		distinct[strings.ToLower(candidate.Value)] = struct{}{}
+	}
+	if len(distinct) <= 1 {
+		return conflictRecord{}
+	}
+	return conflictRecord{Field: "name", Candidates: ordered}
+}
+
+func chooseRepositoryCandidate(field string, candidates []conflictCandidate) (string, string, conflictRecord) {
+	ordered := dedupeConflictCandidates(candidates)
+	if len(ordered) == 0 {
+		return "", "", conflictRecord{}
+	}
+	chosen := ordered[0]
+	conflict := conflictRecord{}
+	distinct := map[string]struct{}{}
+	for _, candidate := range ordered {
+		distinct[candidate.Value] = struct{}{}
+	}
+	if len(distinct) > 1 {
+		conflict = conflictRecord{
+			Field:       field,
+			Resolved:    true,
+			ChosenValue: chosen.Value,
+			Candidates:  ordered,
+		}
+	}
+	return chosen.Value, chosen.Source, conflict
+}
+
+func dedupeConflictCandidates(candidates []conflictCandidate) []conflictCandidate {
+	out := make([]conflictCandidate, 0, len(candidates))
+	seen := map[string]struct{}{}
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate.Value) == "" {
+			continue
+		}
+		key := candidate.Value + "\x00" + candidate.Source
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, candidate)
+	}
+	return out
+}
+
+func finalizeConflicts(conflicts []conflictRecord, manifest protocol.Manifest) []conflictRecord {
+	out := make([]conflictRecord, 0, len(conflicts))
+	seen := map[string]struct{}{}
+	for _, conflict := range conflicts {
+		if len(conflict.Candidates) == 0 {
+			continue
+		}
+		if _, ok := seen[conflict.Field]; ok {
+			continue
+		}
+		seen[conflict.Field] = struct{}{}
+		switch conflict.Field {
+		case "name":
+			if manifest.Name != "" {
+				conflict.Resolved = true
+				conflict.ChosenValue = manifest.Name
+			}
+		case "author":
+			if manifest.Author != "" {
+				conflict.Resolved = true
+				conflict.ChosenValue = manifest.Author
+			}
+		case "version":
+			if manifest.Version != "" {
+				conflict.Resolved = true
+				conflict.ChosenValue = manifest.Version
+			}
+		}
+		out = append(out, conflict)
+	}
 	return out
 }
 

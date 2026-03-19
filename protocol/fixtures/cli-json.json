@@ -79,6 +79,7 @@
         "inferences": [
           { "field": "files[0].style", "value": "normal", "source": "embedded_metadata" }
         ],
+        "conflicts": [],
         "unresolved_fields": []
       }
     }

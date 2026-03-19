@@ -154,6 +154,48 @@ func ValidatePackageInitResult(env CLIEnvelope) error {
 	if _, ok := env.Data["unresolved_fields"].([]any); !ok {
 		return fmt.Errorf("missing unresolved_fields")
 	}
+	conflicts, ok := env.Data["conflicts"].([]any)
+	if !ok {
+		return fmt.Errorf("missing conflicts")
+	}
+	for _, raw := range conflicts {
+		conflict, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("invalid conflict")
+		}
+		if _, ok := conflict["field"].(string); !ok {
+			return fmt.Errorf("missing conflict field")
+		}
+		resolved, ok := conflict["resolved"].(bool)
+		if !ok {
+			return fmt.Errorf("missing conflict resolved")
+		}
+		candidates, ok := conflict["candidates"].([]any)
+		if !ok {
+			return fmt.Errorf("missing conflict candidates")
+		}
+		for _, candidateRaw := range candidates {
+			candidate, ok := candidateRaw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("invalid conflict candidate")
+			}
+			if _, ok := candidate["value"].(string); !ok {
+				return fmt.Errorf("missing conflict candidate value")
+			}
+			source, ok := candidate["source"].(string)
+			if !ok {
+				return fmt.Errorf("missing conflict candidate source")
+			}
+			if source != "embedded_metadata" && source != "group_embedded_metadata" && source != "filename_heuristic" && source != "user_input" && source != "repository_readme" && source != "repository_owner" && source != "repository_changelog" && source != "repository_tag" {
+				return fmt.Errorf("invalid conflict candidate source")
+			}
+		}
+		if resolved {
+			if _, ok := conflict["chosen_value"].(string); !ok {
+				return fmt.Errorf("missing chosen_value")
+			}
+		}
+	}
 	return nil
 }
 

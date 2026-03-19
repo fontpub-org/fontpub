@@ -1025,6 +1025,92 @@ func TestPackageInitJSONInfersVersionFromGitTag(t *testing.T) {
 	}
 }
 
+func TestPackageInitJSONReportsResolvedVersionConflict(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "fonts"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "\x00\x01\x00\x00", "Example Sans", "Regular", 400, false)
+	if err := os.WriteFile(filepath.Join(root, "fonts", "ExampleSans-Regular.ttf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile ttf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"author":"Example Studio","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "CHANGELOG.md"), []byte("## 1.002\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile changelog: %v", err)
+	}
+	runGit(t, root, "init")
+	runGit(t, root, "config", "user.name", "Example User")
+	runGit(t, root, "config", "user.email", "example@example.test")
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "initial")
+	runGit(t, root, "tag", "1.001")
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--json"}); code != 0 {
+		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	conflicts, ok := env.Data["conflicts"].([]any)
+	if !ok {
+		t.Fatalf("unexpected conflicts: %#v", env.Data["conflicts"])
+	}
+	if len(conflicts) != 1 {
+		t.Fatalf("unexpected conflicts length: %#v", conflicts)
+	}
+	conflict, ok := conflicts[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected conflict: %#v", conflicts[0])
+	}
+	if conflict["field"] != "version" || conflict["resolved"] != true || conflict["chosen_value"] != "1.002" {
+		t.Fatalf("unexpected conflict payload: %#v", conflict)
+	}
+}
+
+func TestPackageInitHumanReadableReportsConflicts(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "fonts"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "\x00\x01\x00\x00", "Example Sans", "Regular", 400, false)
+	if err := os.WriteFile(filepath.Join(root, "fonts", "ExampleSans-Regular.ttf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile ttf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("Copyright (c) 2026 [Example Studio](https://example.test)\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile readme: %v", err)
+	}
+	runGit(t, root, "init")
+	runGit(t, root, "config", "user.name", "Example User")
+	runGit(t, root, "config", "user.email", "example@example.test")
+	runGit(t, root, "remote", "add", "origin", "https://github.com/example/family.git")
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr, Stdin: strings.NewReader("1.002\n")}
+	if code := app.Run(context.Background(), []string{"package", "init", root}); code != 0 {
+		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Conflicts:\n",
+		"  author (resolved)\n",
+		"    chosen: Example Studio\n",
+		"    - Example Studio (repository README)\n",
+		"    - example (repository owner)\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package init output missing %q\n%s", want, output)
+		}
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

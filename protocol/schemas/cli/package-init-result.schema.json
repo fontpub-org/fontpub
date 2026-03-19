@@ -11,7 +11,7 @@
     "data": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["manifest", "inferences", "unresolved_fields"],
+      "required": ["manifest", "inferences", "conflicts", "unresolved_fields"],
       "properties": {
         "manifest": { "type": "object" },
         "inferences": {
@@ -23,7 +23,32 @@
             "properties": {
               "field": { "type": "string" },
               "value": {},
-              "source": { "enum": ["embedded_metadata", "filename_heuristic", "user_input"] }
+              "source": { "enum": ["embedded_metadata", "group_embedded_metadata", "filename_heuristic", "user_input", "repository_readme", "repository_owner", "repository_changelog", "repository_tag"] }
+            }
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "resolved", "candidates"],
+            "properties": {
+              "field": { "type": "string" },
+              "resolved": { "type": "boolean" },
+              "chosen_value": { "type": "string" },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["value", "source"],
+                  "properties": {
+                    "value": { "type": "string" },
+                    "source": { "enum": ["embedded_metadata", "group_embedded_metadata", "filename_heuristic", "user_input", "repository_readme", "repository_owner", "repository_changelog", "repository_tag"] }
+                  }
+                }
+              }
             }
           }
         },
