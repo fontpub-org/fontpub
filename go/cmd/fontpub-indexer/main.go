@@ -26,7 +26,7 @@ func main() {
 		Processor: updateapi.PublishingProcessor{
 			ValidationProcessor: updateapi.ValidationProcessor{
 				State:   state.NewMemoryStore(),
-				Fetcher: githubraw.HTTPFetcher{Client: http.DefaultClient},
+				Fetcher: buildFetcherFromEnv(),
 			},
 			ArtifactStore: artifactStore,
 			Clock:         updateapi.RealClock{},
@@ -57,4 +57,16 @@ func buildArtifactStoreFromEnv() artifacts.Store {
 		return artifacts.NewFileStore(root)
 	}
 	return artifacts.NewMemoryStore()
+}
+
+func buildFetcherFromEnv() githubraw.Fetcher {
+	remote := githubraw.HTTPFetcher{Client: http.DefaultClient}
+	localRepos, err := githubraw.ParseLocalRepoMap(os.Getenv("FONTPUB_DEV_LOCAL_REPO_MAP"))
+	if err != nil || len(localRepos) == 0 {
+		return remote
+	}
+	return githubraw.RoutingFetcher{
+		LocalRepos: localRepos,
+		Remote:     remote,
+	}
 }
