@@ -175,6 +175,24 @@ go run ./cmd/fontpub-indexer
 
 The Indexer expects GitHub Actions OIDC-compatible JWT verification material and an artifacts directory for public JSON documents.
 
+For production-like operation, `fontpub-indexer` can fetch GitHub's JWKS remotely instead of requiring `FONTPUB_GITHUB_JWKS_JSON`.
+
+By default it uses:
+
+```text
+https://token.actions.githubusercontent.com/.well-known/jwks
+```
+
+Optional settings:
+
+```bash
+export FONTPUB_GITHUB_JWKS_URL=https://token.actions.githubusercontent.com/.well-known/jwks
+export FONTPUB_GITHUB_JWKS_TIMEOUT=5s
+export FONTPUB_GITHUB_JWKS_CACHE_TTL=10m
+```
+
+If `FONTPUB_GITHUB_JWKS_JSON` is set, the static JSON value takes precedence over remote fetch mode.
+
 ### S3-Compatible Artifact Backend
 
 Both `fontpub-indexer` and `fontpub-rebuilder` support `file`, `memory`, and `s3` artifact backends.

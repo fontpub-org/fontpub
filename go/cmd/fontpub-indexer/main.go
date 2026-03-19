@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
 	"github.com/fontpub-org/fontpub/go/internal/indexer/githubraw"
@@ -42,18 +43,48 @@ func main() {
 
 func buildVerifierFromEnv() updateapi.Verifier {
 	jwksJSON := os.Getenv("FONTPUB_GITHUB_JWKS_JSON")
-	if jwksJSON == "" {
-		return updateapi.StaticVerifier{Err: os.ErrInvalid}
+	if jwksJSON != "" {
+		var set oidc.JWKS
+		if err := json.Unmarshal([]byte(jwksJSON), &set); err != nil {
+			return updateapi.StaticVerifier{Err: err}
+		}
+		return oidc.Verifier{
+			Provider: oidc.StaticProvider{Set: set},
+			Issuer:   "https://token.actions.githubusercontent.com",
+			Audience: "https://fontpub.org",
+		}
 	}
-	var set oidc.JWKS
-	if err := json.Unmarshal([]byte(jwksJSON), &set); err != nil {
+
+	timeout, err := parseDurationEnv("FONTPUB_GITHUB_JWKS_TIMEOUT", 5*time.Second)
+	if err != nil {
 		return updateapi.StaticVerifier{Err: err}
 	}
+	ttl, err := parseDurationEnv("FONTPUB_GITHUB_JWKS_CACHE_TTL", 10*time.Minute)
+	if err != nil {
+		return updateapi.StaticVerifier{Err: err}
+	}
+
+	jwksURL := os.Getenv("FONTPUB_GITHUB_JWKS_URL")
+	if jwksURL == "" {
+		jwksURL = "https://token.actions.githubusercontent.com/.well-known/jwks"
+	}
 	return oidc.Verifier{
-		Provider: oidc.StaticProvider{Set: set},
+		Provider: &oidc.RemoteJWKSProvider{
+			URL:    jwksURL,
+			Client: &http.Client{Timeout: timeout},
+			TTL:    ttl,
+		},
 		Issuer:   "https://token.actions.githubusercontent.com",
 		Audience: "https://fontpub.org",
 	}
+}
+
+func parseDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback, nil
+	}
+	return time.ParseDuration(value)
 }
 
 func buildArtifactStoreFromEnv() (artifacts.Store, error) {

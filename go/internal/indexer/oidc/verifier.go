@@ -21,6 +21,11 @@ type Provider interface {
 	KeySet(ctx context.Context) (JWKS, error)
 }
 
+type RefreshingProvider interface {
+	Provider
+	RefreshKeySet(ctx context.Context) (JWKS, error)
+}
+
 type JWKS struct {
 	Keys []JWK `json:"keys"`
 }
@@ -113,6 +118,18 @@ func (v Verifier) Verify(ctx context.Context, rawToken string) (protocol.OIDCCla
 	}
 	key, err := findRSAKey(set, header.Kid)
 	if err != nil {
+		var missingKidErr *MissingKIDError
+		if errors.As(err, &missingKidErr) {
+			if refresher, ok := v.Provider.(RefreshingProvider); ok {
+				refreshed, refreshErr := refresher.RefreshKeySet(ctx)
+				if refreshErr == nil {
+					set = refreshed
+					key, err = findRSAKey(set, header.Kid)
+				}
+			}
+		}
+	}
+	if err != nil {
 		return protocol.OIDCClaims{}, err
 	}
 	hashed := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
@@ -168,6 +185,14 @@ func numericClaim(raw any) (int64, bool) {
 	}
 }
 
+type MissingKIDError struct {
+	KID string
+}
+
+func (e *MissingKIDError) Error() string {
+	return fmt.Sprintf("kid not found: %s", e.KID)
+}
+
 func findRSAKey(set JWKS, kid string) (*rsa.PublicKey, error) {
 	for _, key := range set.Keys {
 		if key.Kid != kid {
@@ -195,7 +220,7 @@ func findRSAKey(set JWKS, kid string) (*rsa.PublicKey, error) {
 			E: int(exponent),
 		}, nil
 	}
-	return nil, fmt.Errorf("kid not found")
+	return nil, &MissingKIDError{KID: kid}
 }
 
 func decodeProtocolClaims(raw map[string]any) (protocol.OIDCClaims, error) {
