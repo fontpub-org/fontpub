@@ -158,3 +158,44 @@ These are recommendations, not protocol requirements:
   - a memory-backed store is appropriate for tests and ephemeral local runs
 
 The key requirement is not the product choice. The key requirement is preserving the authoritative role of public immutable metadata.
+
+## Recommended repository organization
+
+The repository should be organized around the protocol assets and the append-only publication model so that the CLI, Update API, and Rebuilder share deterministic logic.
+
+```text
+.
+├─ AGENTS.md
+├─ README.md
+├─ docs/                            # authoritative protocol/spec docs
+├─ protocol/
+│  ├─ schemas/                      # JSON Schemas for public documents
+│  ├─ fixtures/                     # manifests, JWT claim sets, golden indexes, errors
+│  ├─ golden/                       # canonical JSON outputs for conformance tests
+│  └─ README.md
+├─ go/
+│  ├─ go.mod
+│  ├─ cmd/
+│  │  ├─ fontpub/                   # CLI
+│  │  ├─ fontpub-indexer/           # POST /v1/update service
+│  │  └─ fontpub-rebuilder/         # derived-document rebuilder
+│  └─ internal/
+│     ├─ cli/                       # CLI config, metadata client, lockfile, commands
+│     ├─ protocol/                  # versioning, canonical JSON, validation helpers
+│     └─ indexer/
+│        ├─ artifacts/              # public JSON storage backends
+│        ├─ derive/                 # shared derived-document generation
+│        ├─ githubraw/              # pinned URL fetch logic
+│        ├─ httpx/                  # HTTP response helpers
+│        ├─ oidc/                   # JWT verification
+│        ├─ rebuilder/              # rebuild orchestration
+│        ├─ state/                  # ownership and replay state abstractions
+│        └─ updateapi/              # immutable publication flow
+└─ tools/
+   └─ scripts/                      # release helpers, fixture generation, local checks
+```
+
+Repository organization guidelines:
+- Use one shared Go module so the CLI, Update API, and Rebuilder can share versioning, hashing, canonicalization, and protocol logic.
+- Keep `protocol/` language-neutral where possible so it remains usable by other implementations.
+- If a website or docs app is added later, it should not own protocol logic.
