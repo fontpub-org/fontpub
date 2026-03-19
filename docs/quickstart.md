@@ -223,6 +223,14 @@ FONTPUB_DEV_LOCAL_REPO_MAP='0xtype/gamut=/Users/ma/0xType/Gamut' \
 go run ./cmd/fontpub install 0xtype/gamut --activate --json
 ```
 
+If you want to run the whole local-only flow in one command, use the helper script:
+
+```bash
+tools/scripts/local-dev-e2e.sh --package-id 0xType/Gamut --repo /Users/ma/0xType/Gamut --tag 1.002 --keep
+```
+
+The script generates a temporary dev JWT, runs the local indexer, serves the generated artifacts, and exercises `fontpub list/show/install/status/verify` against them.
+
 ## Run Tests
 
 From the Go module root:
