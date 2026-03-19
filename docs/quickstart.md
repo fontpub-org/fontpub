@@ -175,6 +175,54 @@ go run ./cmd/fontpub-indexer
 
 The Indexer expects GitHub Actions OIDC-compatible JWT verification material and an artifacts directory for public JSON documents.
 
+### Local-Only End-To-End Mode
+
+If you want to test publication and installation without pushing a font repository to GitHub, the current implementation supports a development-only local Git mode.
+
+Set `FONTPUB_DEV_LOCAL_REPO_MAP` to map a canonical package ID to a local Git checkout:
+
+```bash
+export FONTPUB_DEV_LOCAL_REPO_MAP='0xtype/gamut=/Users/ma/0xType/Gamut'
+```
+
+In this mode:
+
+- `fontpub-indexer` still receives the normal `repository`, `sha`, and `ref` request body
+- published metadata still contains SHA-pinned `raw.githubusercontent.com` URLs
+- but the implementation resolves those GitHub Raw URLs from the mapped local Git checkout when the repository is present in `FONTPUB_DEV_LOCAL_REPO_MAP`
+
+This is a development aid only. It does not change the public Fontpub protocol.
+
+A practical local-only flow is:
+
+1. prepare and commit `fontpub.json` in the target font repository
+2. ensure the local release tag points at that commit
+3. run `fontpub-indexer` with both:
+   - `FONTPUB_ARTIFACTS_DIR=/path/to/artifacts`
+   - `FONTPUB_DEV_LOCAL_REPO_MAP='owner/repo=/path/to/local/repo'`
+4. publish into the local artifacts directory
+5. serve the artifacts directory with a static file server
+6. run the user CLI with:
+   - `FONTPUB_BASE_URL=http://127.0.0.1:<port>`
+   - `FONTPUB_DEV_LOCAL_REPO_MAP='owner/repo=/path/to/local/repo'`
+
+Example static file server:
+
+```bash
+python3 -m http.server 18081 --bind 127.0.0.1 --directory /path/to/artifacts
+```
+
+Example user CLI invocation against the local artifacts:
+
+```bash
+cd go
+FONTPUB_BASE_URL=http://127.0.0.1:18081 \
+FONTPUB_STATE_DIR=/tmp/fontpub-user-state \
+FONTPUB_ACTIVATION_DIR=/tmp/fontpub-user-fonts \
+FONTPUB_DEV_LOCAL_REPO_MAP='0xtype/gamut=/Users/ma/0xType/Gamut' \
+go run ./cmd/fontpub install 0xtype/gamut --activate --json
+```
+
 ## Run Tests
 
 From the Go module root:
