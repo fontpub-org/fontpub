@@ -175,6 +175,38 @@ go run ./cmd/fontpub-indexer
 
 The Indexer expects GitHub Actions OIDC-compatible JWT verification material and an artifacts directory for public JSON documents.
 
+### S3-Compatible Artifact Backend
+
+Both `fontpub-indexer` and `fontpub-rebuilder` support `file`, `memory`, and `s3` artifact backends.
+
+To use an S3-compatible backend, set:
+
+```bash
+export FONTPUB_ARTIFACTS_BACKEND=s3
+export FONTPUB_S3_BUCKET=fontpub-artifacts
+export FONTPUB_S3_REGION=auto
+export FONTPUB_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com
+export FONTPUB_S3_PREFIX=dev
+export FONTPUB_S3_FORCE_PATH_STYLE=false
+```
+
+Credentials are resolved through the normal AWS SDK environment and shared-config chain, for example:
+
+```bash
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+```
+
+With those variables set, the binaries can be started the same way:
+
+```bash
+cd go
+FONTPUB_GITHUB_JWKS_JSON='{"keys":[...]}' go run ./cmd/fontpub-indexer
+go run ./cmd/fontpub-rebuilder
+```
+
+`FONTPUB_S3_PREFIX` is optional. Use it when you want Fontpub to write under a sub-prefix instead of the bucket root.
+
 ### Local-Only End-To-End Mode
 
 If you want to test publication and installation without pushing a font repository to GitHub, the current implementation supports a development-only local Git mode.

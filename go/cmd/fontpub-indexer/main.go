@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -18,7 +19,10 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
-	artifactStore := buildArtifactStoreFromEnv()
+	artifactStore, err := buildArtifactStoreFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	verifier := buildVerifierFromEnv()
 	server := updateapi.Server{
@@ -52,11 +56,11 @@ func buildVerifierFromEnv() updateapi.Verifier {
 	}
 }
 
-func buildArtifactStoreFromEnv() artifacts.Store {
-	if root := os.Getenv("FONTPUB_ARTIFACTS_DIR"); root != "" {
-		return artifacts.NewFileStore(root)
-	}
-	return artifacts.NewMemoryStore()
+func buildArtifactStoreFromEnv() (artifacts.Store, error) {
+	return artifacts.NewStoreFromEnv(context.Background(), artifacts.EnvStoreOptions{
+		DefaultBackend: "memory",
+		Getenv:         os.Getenv,
+	})
 }
 
 func buildFetcherFromEnv() githubraw.Fetcher {

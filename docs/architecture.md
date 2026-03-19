@@ -98,6 +98,12 @@ The read plane should be static:
 - immutable JSON documents
 - strong `ETag`
 
+For v1 implementations, a single S3-compatible artifact backend is a good default because it can target:
+- AWS S3
+- Cloudflare R2
+- MinIO
+- other S3-compatible stores
+
 ### Write plane
 
 The write plane should be stateful and small:
