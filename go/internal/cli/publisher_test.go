@@ -44,3 +44,36 @@ func TestInferFromFilenameNormalizesWOFF2FamilyName(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyStemGroupingPrefersEmbeddedMetadataAcrossFormats(t *testing.T) {
+	assets := []inspection{
+		{
+			Path:         "fonts/0xProto-Regular.otf",
+			Format:       "otf",
+			Style:        "normal",
+			Weight:       400,
+			Name:         "0x Proto",
+			styleSource:  "embedded_metadata",
+			weightSource: "embedded_metadata",
+			nameSource:   "embedded_metadata",
+		},
+		{
+			Path:         "fonts/0xProto-Regular.woff2",
+			Format:       "woff2",
+			Style:        "normal",
+			Weight:       400,
+			Name:         "0xProto",
+			styleSource:  "filename_heuristic",
+			weightSource: "filename_heuristic",
+			nameSource:   "filename_heuristic",
+		},
+	}
+
+	grouped := applyStemGrouping(assets)
+	if grouped[1].Name != "0x Proto" {
+		t.Fatalf("unexpected grouped name: %q", grouped[1].Name)
+	}
+	if grouped[1].nameSource != "group_embedded_metadata" {
+		t.Fatalf("unexpected grouped source: %q", grouped[1].nameSource)
+	}
+}

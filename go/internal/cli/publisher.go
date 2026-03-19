@@ -317,6 +317,7 @@ func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inspecti
 	if err != nil {
 		return protocol.Manifest{}, nil, nil, nil, err
 	}
+	assets = applyStemGrouping(assets)
 	if len(assets) == 0 {
 		return protocol.Manifest{}, nil, nil, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "no distributable font files found", Details: map[string]any{"root_path": root}}
 	}
@@ -553,6 +554,128 @@ func inspectFontFile(fullPath, relPath, format string) (inspection, error) {
 	return info, nil
 }
 
+func applyStemGrouping(assets []inspection) []inspection {
+	grouped := make(map[string][]int)
+	for i, asset := range assets {
+		grouped[stemGroupKey(asset.Path)] = append(grouped[stemGroupKey(asset.Path)], i)
+	}
+	for _, indexes := range grouped {
+		if len(indexes) < 2 {
+			continue
+		}
+		bestNameValue, bestNameSource, hasName := bestGroupedStringField(assets, indexes, func(asset inspection) (string, string) {
+			return asset.Name, asset.nameSource
+		})
+		bestStyleValue, bestStyleSource, hasStyle := bestGroupedStringField(assets, indexes, func(asset inspection) (string, string) {
+			return asset.Style, asset.styleSource
+		})
+		bestWeightValue, bestWeightSource, hasWeight := bestGroupedIntField(assets, indexes, func(asset inspection) (int, string) {
+			return asset.Weight, asset.weightSource
+		})
+		for _, idx := range indexes {
+			if hasName && groupedSourcePriority(bestNameSource) > groupedSourcePriority(assets[idx].nameSource) {
+				assets[idx].Name = bestNameValue
+				assets[idx].nameSource = groupedInheritedSource(bestNameSource)
+			}
+			if hasStyle && groupedSourcePriority(bestStyleSource) > groupedSourcePriority(assets[idx].styleSource) {
+				assets[idx].Style = bestStyleValue
+				assets[idx].styleSource = groupedInheritedSource(bestStyleSource)
+			}
+			if hasWeight && groupedSourcePriority(bestWeightSource) > groupedSourcePriority(assets[idx].weightSource) {
+				assets[idx].Weight = bestWeightValue
+				assets[idx].weightSource = groupedInheritedSource(bestWeightSource)
+			}
+		}
+	}
+	return assets
+}
+
+func stemGroupKey(path string) string {
+	dir := filepath.ToSlash(filepath.Dir(path))
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if dir == "." || dir == "" {
+		return base
+	}
+	return dir + "/" + base
+}
+
+func bestGroupedStringField(assets []inspection, indexes []int, get func(inspection) (string, string)) (string, string, bool) {
+	bestValue := ""
+	bestSource := ""
+	bestPriority := -1
+	bestFormatPriority := -1
+	for _, idx := range indexes {
+		value, source := get(assets[idx])
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		priority := groupedSourcePriority(source)
+		formatPriority := groupedFormatPriority(assets[idx].Format)
+		if priority > bestPriority || (priority == bestPriority && formatPriority > bestFormatPriority) {
+			bestValue = value
+			bestSource = source
+			bestPriority = priority
+			bestFormatPriority = formatPriority
+		}
+	}
+	return bestValue, bestSource, bestPriority >= 0
+}
+
+func bestGroupedIntField(assets []inspection, indexes []int, get func(inspection) (int, string)) (int, string, bool) {
+	bestValue := 0
+	bestSource := ""
+	bestPriority := -1
+	bestFormatPriority := -1
+	for _, idx := range indexes {
+		value, source := get(assets[idx])
+		if value <= 0 {
+			continue
+		}
+		priority := groupedSourcePriority(source)
+		formatPriority := groupedFormatPriority(assets[idx].Format)
+		if priority > bestPriority || (priority == bestPriority && formatPriority > bestFormatPriority) {
+			bestValue = value
+			bestSource = source
+			bestPriority = priority
+			bestFormatPriority = formatPriority
+		}
+	}
+	return bestValue, bestSource, bestPriority >= 0
+}
+
+func groupedSourcePriority(source string) int {
+	switch source {
+	case "embedded_metadata":
+		return 30
+	case "group_embedded_metadata":
+		return 25
+	case "filename_heuristic":
+		return 10
+	default:
+		return 0
+	}
+}
+
+func groupedFormatPriority(format string) int {
+	switch format {
+	case "otf":
+		return 3
+	case "ttf":
+		return 2
+	case "woff2":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func groupedInheritedSource(source string) string {
+	if source == "embedded_metadata" || source == "group_embedded_metadata" {
+		return "group_embedded_metadata"
+	}
+	return source
+}
+
 func inferFromFilename(path string) (string, int, string) {
 	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	lower := strings.ToLower(base)
@@ -760,6 +883,8 @@ func humanizeInferenceSource(source string) string {
 	switch source {
 	case "embedded_metadata":
 		return "embedded metadata"
+	case "group_embedded_metadata":
+		return "grouped embedded metadata"
 	case "filename_heuristic":
 		return "filename heuristic"
 	case "user_input":
