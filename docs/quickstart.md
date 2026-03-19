@@ -182,7 +182,7 @@ If you want to test publication and installation without pushing a font reposito
 Set `FONTPUB_DEV_LOCAL_REPO_MAP` to map a canonical package ID to a local Git checkout:
 
 ```bash
-export FONTPUB_DEV_LOCAL_REPO_MAP='0xtype/gamut=/Users/ma/0xType/Gamut'
+export FONTPUB_DEV_LOCAL_REPO_MAP='owner/repo=/path/to/local/repo'
 ```
 
 In this mode:
@@ -219,14 +219,14 @@ cd go
 FONTPUB_BASE_URL=http://127.0.0.1:18081 \
 FONTPUB_STATE_DIR=/tmp/fontpub-user-state \
 FONTPUB_ACTIVATION_DIR=/tmp/fontpub-user-fonts \
-FONTPUB_DEV_LOCAL_REPO_MAP='0xtype/gamut=/Users/ma/0xType/Gamut' \
-go run ./cmd/fontpub install 0xtype/gamut --activate --json
+FONTPUB_DEV_LOCAL_REPO_MAP='owner/repo=/path/to/local/repo' \
+go run ./cmd/fontpub install owner/repo --activate --json
 ```
 
 If you want to run the whole local-only flow in one command, use the helper script:
 
 ```bash
-tools/scripts/local-dev-e2e.sh --package-id 0xType/Gamut --repo /Users/ma/0xType/Gamut --tag 1.002 --keep
+tools/scripts/local-dev-e2e.sh --package-id owner/repo --repo /path/to/local/repo --tag 1.002 --keep
 ```
 
 The script generates a temporary dev JWT, runs the local indexer, serves the generated artifacts, and exercises `fontpub list/show/install/status/verify` against them.
@@ -237,7 +237,7 @@ From the Go module root:
 
 ```bash
 cd go
-env GOCACHE=/Users/ma/github/fontpub/.gocache go test ./...
+go test ./...
 ```
 
 ## Related Docs
