@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/fontpub-org/fontpub/go/internal/indexer/githubraw"
 )
 
 type Config struct {
@@ -12,6 +14,7 @@ type Config struct {
 	DefaultActivationDir string
 	HTTPTimeout          time.Duration
 	UserAgent            string
+	LocalRepoMap         map[string]string
 }
 
 func DefaultConfig() Config {
@@ -27,12 +30,14 @@ func DefaultConfig() Config {
 	if stateDir == "" {
 		stateDir = filepath.Join(home, ".fontpub")
 	}
+	localRepoMap, _ := githubraw.ParseLocalRepoMap(os.Getenv("FONTPUB_DEV_LOCAL_REPO_MAP"))
 	return Config{
 		BaseURL:              baseURL,
 		StateDir:             stateDir,
 		DefaultActivationDir: os.Getenv("FONTPUB_ACTIVATION_DIR"),
 		HTTPTimeout:          10 * time.Second,
 		UserAgent:            "fontpub/dev",
+		LocalRepoMap:         localRepoMap,
 	}
 }
 

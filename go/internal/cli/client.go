@@ -10,22 +10,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fontpub-org/fontpub/go/internal/indexer/githubraw"
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
+const assetDownloadMaxBytes = 50 * 1024 * 1024
+
 type MetadataClient struct {
-	BaseURL    string
-	UserAgent  string
-	HTTPClient *http.Client
+	BaseURL      string
+	UserAgent    string
+	HTTPClient   *http.Client
+	AssetFetcher githubraw.Fetcher
 }
 
 func NewMetadataClient(cfg Config) *MetadataClient {
+	httpClient := &http.Client{
+		Timeout: cfg.HTTPTimeout,
+	}
+	var assetFetcher githubraw.Fetcher
+	if len(cfg.LocalRepoMap) > 0 {
+		assetFetcher = githubraw.RoutingFetcher{
+			LocalRepos: cfg.LocalRepoMap,
+			Remote:     githubraw.HTTPFetcher{Client: httpClient},
+		}
+	}
 	return &MetadataClient{
-		BaseURL:   strings.TrimRight(cfg.BaseURL, "/"),
-		UserAgent: cfg.UserAgent,
-		HTTPClient: &http.Client{
-			Timeout: cfg.HTTPTimeout,
-		},
+		BaseURL:      strings.TrimRight(cfg.BaseURL, "/"),
+		UserAgent:    cfg.UserAgent,
+		AssetFetcher: assetFetcher,
+		HTTPClient:   httpClient,
 	}
 }
 
@@ -104,6 +117,18 @@ func (c *MetadataClient) getJSON(ctx context.Context, path string, dest any) err
 }
 
 func (c *MetadataClient) Download(ctx context.Context, rawURL string) ([]byte, error) {
+	if c.AssetFetcher != nil {
+		result, err := c.AssetFetcher.Fetch(ctx, rawURL, assetDownloadMaxBytes)
+		if err == nil {
+			return result.Body, nil
+		}
+		switch err {
+		case githubraw.ErrNotFound:
+			return nil, &CLIError{Code: "LOCAL_FILE_MISSING", Message: "download source was not found", Details: map[string]any{"url": rawURL}}
+		case githubraw.ErrTooLarge:
+			return nil, &CLIError{Code: "INTERNAL_ERROR", Message: "download exceeds maximum asset size", Details: map[string]any{"url": rawURL}}
+		}
+	}
 	if c.HTTPClient == nil {
 		c.HTTPClient = &http.Client{Timeout: 10 * time.Second}
 	}
