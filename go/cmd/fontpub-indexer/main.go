@@ -24,13 +24,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	stateStore, err := buildStateStoreFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	verifier := buildVerifierFromEnv()
 	server := updateapi.Server{
 		Verifier: verifier,
 		Processor: updateapi.PublishingProcessor{
 			ValidationProcessor: updateapi.ValidationProcessor{
-				State:   state.NewMemoryStore(),
+				State:   stateStore,
 				Fetcher: buildFetcherFromEnv(),
 			},
 			ArtifactStore: artifactStore,
@@ -89,6 +93,13 @@ func parseDurationEnv(key string, fallback time.Duration) (time.Duration, error)
 
 func buildArtifactStoreFromEnv() (artifacts.Store, error) {
 	return artifacts.NewStoreFromEnv(context.Background(), artifacts.EnvStoreOptions{
+		DefaultBackend: "memory",
+		Getenv:         os.Getenv,
+	})
+}
+
+func buildStateStoreFromEnv() (state.Store, error) {
+	return state.NewStoreFromEnv(context.Background(), state.EnvStoreOptions{
 		DefaultBackend: "memory",
 		Getenv:         os.Getenv,
 	})

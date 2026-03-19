@@ -8,6 +8,7 @@ import (
 	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
 	"github.com/fontpub-org/fontpub/go/internal/indexer/githubraw"
 	"github.com/fontpub-org/fontpub/go/internal/indexer/oidc"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/state"
 	"github.com/fontpub-org/fontpub/go/internal/indexer/updateapi"
 )
 
@@ -59,6 +60,30 @@ func TestBuildArtifactStoreFromEnvUsesFileStore(t *testing.T) {
 		t.Fatalf("buildArtifactStoreFromEnv: %v", err)
 	}
 	if _, ok := store.(*artifacts.FileStore); !ok {
+		t.Fatalf("expected FileStore, got %T", store)
+	}
+}
+
+func TestBuildStateStoreFromEnvDefaultsToMemory(t *testing.T) {
+	t.Setenv("FONTPUB_STATE_BACKEND", "")
+	t.Setenv("FONTPUB_STATE_DIR", "")
+	store, err := buildStateStoreFromEnv()
+	if err != nil {
+		t.Fatalf("buildStateStoreFromEnv: %v", err)
+	}
+	if _, ok := store.(*state.MemoryStore); !ok {
+		t.Fatalf("expected MemoryStore, got %T", store)
+	}
+}
+
+func TestBuildStateStoreFromEnvUsesFileStore(t *testing.T) {
+	t.Setenv("FONTPUB_STATE_BACKEND", "file")
+	t.Setenv("FONTPUB_STATE_DIR", t.TempDir())
+	store, err := buildStateStoreFromEnv()
+	if err != nil {
+		t.Fatalf("buildStateStoreFromEnv: %v", err)
+	}
+	if _, ok := store.(*state.FileStore); !ok {
 		t.Fatalf("expected FileStore, got %T", store)
 	}
 }
