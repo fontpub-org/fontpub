@@ -866,6 +866,57 @@ func TestPackageInitJSONGroupsSameStemFormats(t *testing.T) {
 	}
 }
 
+func TestPackageInitJSONInfersAuthorFromREADME(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "fonts"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "\x00\x01\x00\x00", "Example Sans", "Regular", 400, false)
+	if err := os.WriteFile(filepath.Join(root, "fonts", "ExampleSans-Regular.ttf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile ttf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("# Example Sans\n\nCopyright (c) 2026 [Example Studio](https://example.test)\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile readme: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"version":"1.2.3","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--json"}); code != 0 {
+		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	manifestData, ok := env.Data["manifest"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected manifest data: %#v", env.Data["manifest"])
+	}
+	if manifestData["author"] != "Example Studio" {
+		t.Fatalf("unexpected author: %#v", manifestData["author"])
+	}
+	inferences, ok := env.Data["inferences"].([]any)
+	if !ok {
+		t.Fatalf("unexpected inferences: %#v", env.Data["inferences"])
+	}
+	sources := map[string]string{}
+	for _, raw := range inferences {
+		record, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected inference record: %#v", raw)
+		}
+		field, _ := record["field"].(string)
+		source, _ := record["source"].(string)
+		sources[field] = source
+	}
+	if sources["author"] != "repository_readme" {
+		t.Fatalf("unexpected author source: %#v", sources)
+	}
+}
+
 func TestPackagePreviewJSON(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {

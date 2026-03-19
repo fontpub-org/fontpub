@@ -364,6 +364,12 @@ func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inspecti
 			inferences = append(inferences, inferenceRecord{Field: "name", Value: name, Source: commonNameSource(assets)})
 		}
 	}
+	if manifest.Author == "" {
+		if author, source := inferAuthorFromRepository(root); author != "" {
+			manifest.Author = author
+			inferences = append(inferences, inferenceRecord{Field: "author", Value: author, Source: source})
+		}
+	}
 	return manifest, assets, inferences, unresolvedFields(manifest), nil
 }
 
@@ -819,6 +825,46 @@ func commonNameSource(assets []inspection) string {
 	return source
 }
 
+func inferAuthorFromRepository(root string) (string, string) {
+	if author, ok := inferAuthorFromREADME(root); ok {
+		return author, "repository_readme"
+	}
+	if packageID, err := derivePackageID(root, ""); err == nil {
+		parts := strings.SplitN(packageID, "/", 2)
+		if len(parts) == 2 && parts[0] != "" {
+			return parts[0], "repository_owner"
+		}
+	}
+	return "", ""
+}
+
+func inferAuthorFromREADME(root string) (string, bool) {
+	body, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		return "", false
+	}
+	lines := strings.Split(string(body), "\n")
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		if !strings.Contains(lower, "copyright") {
+			continue
+		}
+		open := strings.LastIndex(line, "[")
+		close := strings.LastIndex(line, "]")
+		if open >= 0 && close > open {
+			value := strings.TrimSpace(line[open+1 : close])
+			if value != "" {
+				return value, true
+			}
+		}
+		text := strings.TrimSpace(line)
+		if text != "" {
+			return text, true
+		}
+	}
+	return "", false
+}
+
 func printPackageInitSummary(w io.Writer, root string, manifest protocol.Manifest, assets []inspection, inferences []inferenceRecord, unresolved []string) {
 	fmt.Fprintf(w, "Repository: %s\n", root)
 	fmt.Fprintln(w, "Discovered assets:")
@@ -885,6 +931,10 @@ func humanizeInferenceSource(source string) string {
 		return "embedded metadata"
 	case "group_embedded_metadata":
 		return "grouped embedded metadata"
+	case "repository_readme":
+		return "repository README"
+	case "repository_owner":
+		return "repository owner"
 	case "filename_heuristic":
 		return "filename heuristic"
 	case "user_input":
