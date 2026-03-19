@@ -55,3 +55,36 @@ func TestFileStoreRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected etag: %s", doc.ETag)
 	}
 }
+
+func TestFileStoreListAllWithNonCleanRoot(t *testing.T) {
+	root := t.TempDir() + "/./nested/.."
+	store := NewFileStore(root)
+	detail := protocol.VersionedPackageDetail{
+		SchemaVersion: "1",
+		PackageID:     "0xtype/gamut",
+		DisplayName:   "Zx Gamut",
+		Author:        "0xType",
+		License:       "OFL-1.1",
+		Version:       "1.002",
+		VersionKey:    "1.002",
+		PublishedAt:   "2026-03-19T00:00:00Z",
+		GitHub:        protocol.GitHubRef{Owner: "0xtype", Repo: "gamut", SHA: "0123456789abcdef0123456789abcdef01234567"},
+		ManifestURL:   "https://raw.githubusercontent.com/0xtype/gamut/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+		Assets:        []protocol.VersionedAsset{{Path: "fonts/static/ZxGamut-Bold.otf", URL: "https://raw.githubusercontent.com/0xtype/gamut/0123456789abcdef0123456789abcdef01234567/fonts/static/ZxGamut-Bold.otf", SHA256: "abc", Format: "otf", Style: "normal", Weight: 700, SizeBytes: 11}},
+	}
+	body, err := protocol.MarshalCanonical(detail)
+	if err != nil {
+		t.Fatalf("MarshalCanonical: %v", err)
+	}
+	if err := store.PutVersionedPackageDetail(context.Background(), detail, body, derive.ComputeETag(body)); err != nil {
+		t.Fatalf("PutVersionedPackageDetail: %v", err)
+	}
+
+	list, err := store.ListAllVersionedPackageDetails(context.Background())
+	if err != nil {
+		t.Fatalf("ListAllVersionedPackageDetails: %v", err)
+	}
+	if len(list) != 1 || list[0].PackageID != "0xtype/gamut" {
+		t.Fatalf("unexpected list: %+v", list)
+	}
+}

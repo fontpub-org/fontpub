@@ -19,7 +19,7 @@ type FileStore struct {
 }
 
 func NewFileStore(root string) *FileStore {
-	return &FileStore{root: root}
+	return &FileStore{root: filepath.Clean(root)}
 }
 
 func (s *FileStore) GetVersionedPackageDetail(ctx context.Context, packageID, versionKey string) (protocol.VersionedPackageDetail, bool, error) {
@@ -69,7 +69,11 @@ func (s *FileStore) ListAllVersionedPackageDetails(ctx context.Context) ([]proto
 		if d.IsDir() || filepath.Base(filepath.Dir(path)) != "versions" || !strings.HasSuffix(path, ".json") {
 			return nil
 		}
-		artifactPath := "/" + filepath.ToSlash(strings.TrimPrefix(path, s.root))
+		rel, err := filepath.Rel(s.root, path)
+		if err != nil {
+			return err
+		}
+		artifactPath := "/" + filepath.ToSlash(rel)
 		detail, ok, err := s.readVersionedPackageDetail(ctx, artifactPath)
 		if err != nil {
 			return err
