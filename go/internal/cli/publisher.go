@@ -370,6 +370,12 @@ func (a *App) buildCandidateManifest(root string) (protocol.Manifest, []inspecti
 			inferences = append(inferences, inferenceRecord{Field: "author", Value: author, Source: source})
 		}
 	}
+	if manifest.Version == "" {
+		if version, source := inferVersionFromRepository(root); version != "" {
+			manifest.Version = version
+			inferences = append(inferences, inferenceRecord{Field: "version", Value: version, Source: source})
+		}
+	}
 	return manifest, assets, inferences, unresolvedFields(manifest), nil
 }
 
@@ -865,6 +871,67 @@ func inferAuthorFromREADME(root string) (string, bool) {
 	return "", false
 }
 
+func inferVersionFromRepository(root string) (string, string) {
+	if version, ok := inferVersionFromChangelog(root); ok {
+		return version, "repository_changelog"
+	}
+	if version, ok := inferVersionFromGitTags(root); ok {
+		return version, "repository_tag"
+	}
+	return "", ""
+}
+
+func inferVersionFromChangelog(root string) (string, bool) {
+	body, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
+	if err != nil {
+		return "", false
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		candidate := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+		if candidate == "" {
+			continue
+		}
+		versionKey, err := protocol.NormalizeVersionKey(candidate)
+		if err == nil {
+			return versionKey, true
+		}
+	}
+	return "", false
+}
+
+func inferVersionFromGitTags(root string) (string, bool) {
+	cmd := exec.Command("git", "tag", "--list")
+	cmd.Dir = root
+	output, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	best := ""
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		tag := strings.TrimSpace(line)
+		if tag == "" {
+			continue
+		}
+		versionKey, err := protocol.NormalizeVersionKey(tag)
+		if err != nil {
+			continue
+		}
+		if best == "" {
+			best = versionKey
+			continue
+		}
+		cmp, err := protocol.CompareVersions(versionKey, best)
+		if err == nil && cmp > 0 {
+			best = versionKey
+		}
+	}
+	return best, best != ""
+}
+
 func printPackageInitSummary(w io.Writer, root string, manifest protocol.Manifest, assets []inspection, inferences []inferenceRecord, unresolved []string) {
 	fmt.Fprintf(w, "Repository: %s\n", root)
 	fmt.Fprintln(w, "Discovered assets:")
@@ -935,6 +1002,10 @@ func humanizeInferenceSource(source string) string {
 		return "repository README"
 	case "repository_owner":
 		return "repository owner"
+	case "repository_changelog":
+		return "repository changelog"
+	case "repository_tag":
+		return "repository tag"
 	case "filename_heuristic":
 		return "filename heuristic"
 	case "user_input":

@@ -147,7 +147,7 @@ func ValidatePackageInitResult(env CLIEnvelope) error {
 		if !ok {
 			return fmt.Errorf("missing inference source")
 		}
-		if source != "embedded_metadata" && source != "group_embedded_metadata" && source != "filename_heuristic" && source != "user_input" && source != "repository_readme" && source != "repository_owner" {
+		if source != "embedded_metadata" && source != "group_embedded_metadata" && source != "filename_heuristic" && source != "user_input" && source != "repository_readme" && source != "repository_owner" && source != "repository_changelog" && source != "repository_tag" {
 			return fmt.Errorf("invalid inference source")
 		}
 	}
