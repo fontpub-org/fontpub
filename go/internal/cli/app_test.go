@@ -17,7 +17,7 @@ import (
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
-func TestRunListJSON(t *testing.T) {
+func TestRunLSRemoteJSON(t *testing.T) {
 	client := &MetadataClient{
 		BaseURL:   "https://fontpub.org",
 		UserAgent: "test",
@@ -44,7 +44,7 @@ func TestRunListJSON(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"list", "--json"}); code != 0 {
+	if code := app.Run(context.Background(), []string{"ls-remote", "--json"}); code != 0 {
 		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
 	}
 
@@ -55,10 +55,10 @@ func TestRunListJSON(t *testing.T) {
 	if err := protocol.ValidateCLIEnvelope(env); err != nil {
 		t.Fatalf("ValidateCLIEnvelope: %v", err)
 	}
-	if err := protocol.ValidateCLISchema("list-result.schema.json", env); err != nil {
-		t.Fatalf("ValidateCLISchema(list): %v", err)
+	if err := protocol.ValidateCLISchema("ls-remote-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(ls-remote): %v", err)
 	}
-	if env.Command != "list" || !env.OK {
+	if env.Command != "ls-remote" || !env.OK {
 		t.Fatalf("unexpected env: %+v", env)
 	}
 	packages, ok := env.Data["packages"].([]any)
@@ -89,7 +89,7 @@ func TestRunWithoutCommandPrintsNextStep(t *testing.T) {
 	}
 }
 
-func TestRunListHumanReadable(t *testing.T) {
+func TestRunLSRemoteHumanReadable(t *testing.T) {
 	client := &MetadataClient{
 		BaseURL:   "https://fontpub.org",
 		UserAgent: "test",
@@ -113,7 +113,7 @@ func TestRunListHumanReadable(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"list"}); code != 0 {
+	if code := app.Run(context.Background(), []string{"ls-remote"}); code != 0 {
 		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
 	}
 	output := stdout.String()
@@ -123,7 +123,7 @@ func TestRunListHumanReadable(t *testing.T) {
 		"published 2026-01-02\n",
 	} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("list output missing %q\n%s", want, output)
+			t.Fatalf("ls-remote output missing %q\n%s", want, output)
 		}
 	}
 }
@@ -135,7 +135,7 @@ func TestUnknownFlagPrintsHelpHint(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"status", "--bogus"}); code == 0 {
+	if code := app.Run(context.Background(), []string{"ls", "--bogus"}); code == 0 {
 		t.Fatalf("expected failure")
 	}
 	output := stderr.String()
@@ -143,7 +143,7 @@ func TestUnknownFlagPrintsHelpHint(t *testing.T) {
 		"INPUT_REQUIRED: unknown flag\n",
 		"  flag: --bogus\n",
 		"Next:\n",
-		"  run: fontpub status --help\n",
+		"  run: fontpub ls --help\n",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("stderr missing %q\n%s", want, output)
@@ -259,7 +259,7 @@ func TestRunShowHumanReadable(t *testing.T) {
 	}
 }
 
-func TestRunStatusJSON(t *testing.T) {
+func TestRunLSJSON(t *testing.T) {
 	dir := t.TempDir()
 	lockfilePath := filepath.Join(dir, "fontpub.lock")
 	body, err := os.ReadFile(filepath.Join("..", "..", "..", "protocol", "golden", "lockfile.json"))
@@ -276,7 +276,7 @@ func TestRunStatusJSON(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"status", "--json"}); code != 0 {
+	if code := app.Run(context.Background(), []string{"ls", "--json"}); code != 0 {
 		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
 	}
 
@@ -287,12 +287,12 @@ func TestRunStatusJSON(t *testing.T) {
 	if err := protocol.ValidateStatusResult(env); err != nil {
 		t.Fatalf("ValidateStatusResult: %v", err)
 	}
-	if err := protocol.ValidateCLISchema("status-result.schema.json", env); err != nil {
-		t.Fatalf("ValidateCLISchema(status): %v", err)
+	if err := protocol.ValidateCLISchema("ls-result.schema.json", env); err != nil {
+		t.Fatalf("ValidateCLISchema(ls): %v", err)
 	}
 }
 
-func TestRunStatusHumanReadable(t *testing.T) {
+func TestRunLSHumanReadable(t *testing.T) {
 	dir := t.TempDir()
 	lockfilePath := filepath.Join(dir, "fontpub.lock")
 	body, err := os.ReadFile(filepath.Join("..", "..", "..", "protocol", "golden", "lockfile.json"))
@@ -309,7 +309,7 @@ func TestRunStatusHumanReadable(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"status"}); code != 0 {
+	if code := app.Run(context.Background(), []string{"ls"}); code != 0 {
 		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
 	}
 	output := stdout.String()
@@ -321,12 +321,12 @@ func TestRunStatusHumanReadable(t *testing.T) {
 		"  activation status: not checked (pass --activation-dir or set FONTPUB_ACTIVATION_DIR)\n",
 	} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("status output missing %q\n%s", want, output)
+			t.Fatalf("ls output missing %q\n%s", want, output)
 		}
 	}
 }
 
-func TestRunStatusHumanReadableWithActivationDir(t *testing.T) {
+func TestRunLSHumanReadableWithActivationDir(t *testing.T) {
 	dir := t.TempDir()
 	activationDir := t.TempDir()
 	localPath := filepath.Join(dir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
@@ -369,7 +369,7 @@ func TestRunStatusHumanReadableWithActivationDir(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"status", "example/family"}); code != 0 {
+	if code := app.Run(context.Background(), []string{"ls", "example/family"}); code != 0 {
 		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
 	}
 	output := stdout.String()
@@ -379,12 +379,12 @@ func TestRunStatusHumanReadableWithActivationDir(t *testing.T) {
 		"  activation status: active (1/1 assets linked)\n",
 	} {
 		if !strings.Contains(output, want) {
-			t.Fatalf("status output missing %q\n%s", want, output)
+			t.Fatalf("ls output missing %q\n%s", want, output)
 		}
 	}
 }
 
-func TestRunStatusHumanReadableBrokenActivation(t *testing.T) {
+func TestRunLSHumanReadableBrokenActivation(t *testing.T) {
 	dir := t.TempDir()
 	activationDir := t.TempDir()
 	localPath := filepath.Join(dir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
@@ -428,22 +428,22 @@ func TestRunStatusHumanReadableBrokenActivation(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"status", "example/family", "--activation-dir", activationDir}); code != 0 {
+	if code := app.Run(context.Background(), []string{"ls", "example/family", "--activation-dir", activationDir}); code != 0 {
 		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
 	}
 	if output := stdout.String(); !strings.Contains(output, "  activation status: broken (0/1 assets linked)\n") {
-		t.Fatalf("unexpected status output:\n%s", output)
+		t.Fatalf("unexpected ls output:\n%s", output)
 	}
 }
 
-func TestRunStatusPackageNotInstalled(t *testing.T) {
+func TestRunLSPackageNotInstalled(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	app := App{
 		Config: Config{StateDir: t.TempDir(), BaseURL: "https://fontpub.org"},
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"status", "missing/repo", "--json"}); code == 0 {
+	if code := app.Run(context.Background(), []string{"ls", "missing/repo", "--json"}); code == 0 {
 		t.Fatalf("expected failure")
 	}
 
@@ -466,7 +466,7 @@ func TestHelpOutput(t *testing.T) {
 		{args: []string{"package", "--help"}, want: "Usage:\n  fontpub package <subcommand> [options]"},
 		{args: []string{"package", "init", "--help"}, want: "Usage:\n  fontpub package init [PATH] [--write] [--dry-run] [--yes] [--json]"},
 		{args: []string{"workflow", "init", "--help"}, want: "Usage:\n  fontpub workflow init [PATH] [--dry-run] [--yes] [--json]"},
-		{args: []string{"status", "--json", "--help"}, want: "Usage:\n  fontpub status [<owner>/<repo>] [--activation-dir <path>] [--json]"},
+		{args: []string{"ls", "--json", "--help"}, want: "Usage:\n  fontpub ls [<owner>/<repo>] [--activation-dir <path>] [--json]"},
 	}
 	for _, tc := range tests {
 		t.Run(strings.Join(tc.args, "_"), func(t *testing.T) {
@@ -493,8 +493,8 @@ func TestHelpOutputIncludesDescriptionsAndExamples(t *testing.T) {
 	}
 	output := stdout.String()
 	for _, want := range []string{
-		"list       List published packages\n",
-		"status     Show installed versions and activation state\n",
+		"ls-remote  List published packages\n",
+		"ls         Show installed versions and activation state\n",
 		"Environment:\n",
 		"FONTPUB_ACTIVATION_DIR   Default activation directory for activation commands\n",
 	} {
@@ -510,6 +510,21 @@ func TestHelpOutputIncludesDescriptionsAndExamples(t *testing.T) {
 	}
 	if output := stdout.String(); !strings.Contains(output, "fontpub package preview /path/to/repo --package-id owner/repo --json\n") {
 		t.Fatalf("package help missing example:\n%s", output)
+	}
+}
+
+func TestLegacyListAndStatusCommandsAreRejected(t *testing.T) {
+	for _, args := range [][]string{{"list"}, {"status"}} {
+		t.Run(strings.Join(args, "_"), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+			if code := app.Run(context.Background(), args); code == 0 {
+				t.Fatalf("expected failure for %v", args)
+			}
+			if output := stderr.String(); !strings.Contains(output, "command is not implemented\n") {
+				t.Fatalf("unexpected stderr for %v:\n%s", args, output)
+			}
+		})
 	}
 }
 
@@ -759,7 +774,7 @@ func TestNotInstalledErrorSuggestsInstall(t *testing.T) {
 		Stdout: &stdout,
 		Stderr: &stderr,
 	}
-	if code := app.Run(context.Background(), []string{"status", "example/family"}); code == 0 {
+	if code := app.Run(context.Background(), []string{"ls", "example/family"}); code == 0 {
 		t.Fatalf("expected failure")
 	}
 	output := stderr.String()

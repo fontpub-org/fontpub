@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://fontpub.org/schemas/v1/cli/list-result.schema.json",
+  "$id": "https://fontpub.org/schemas/v1/cli/ls-remote-result.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "ok", "command", "data"],
   "properties": {
     "schema_version": { "const": "1" },
     "ok": { "const": true },
-    "command": { "const": "list" },
+    "command": { "const": "ls-remote" },
     "data": {
       "type": "object",
       "additionalProperties": false,

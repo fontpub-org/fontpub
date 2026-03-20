@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://fontpub.org/schemas/v1/cli/status-result.schema.json",
+  "$id": "https://fontpub.org/schemas/v1/cli/ls-result.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "ok", "command", "data"],
   "properties": {
     "schema_version": { "const": "1" },
     "ok": { "const": true },
-    "command": { "const": "status" },
+    "command": { "const": "ls" },
     "data": {
       "type": "object",
       "additionalProperties": false,

@@ -224,10 +224,10 @@ func matchesNamedType(name string, value any) bool {
 
 func schemaFileNameForCLICommand(command string) string {
 	switch strings.TrimSpace(command) {
-	case "list":
-		return "list-result.schema.json"
-	case "status":
-		return "status-result.schema.json"
+	case "ls-remote":
+		return "ls-remote-result.schema.json"
+	case "ls":
+		return "ls-result.schema.json"
 	case "verify":
 		return "verify-result.schema.json"
 	case "repair":

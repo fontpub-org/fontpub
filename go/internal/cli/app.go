@@ -60,8 +60,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	switch rest[0] {
 	case "package":
 		return a.runPackage(ctx, rest[1:])
-	case "list":
-		return a.runList(ctx, rest[1:])
+	case "ls-remote":
+		return a.runLSRemote(ctx, rest[1:])
 	case "show":
 		return a.runShow(ctx, rest[1:])
 	case "install":
@@ -70,8 +70,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return a.runActivate(ctx, rest[1:])
 	case "deactivate":
 		return a.runDeactivate(ctx, rest[1:])
-	case "status":
-		return a.runStatus(ctx, rest[1:])
+	case "ls":
+		return a.runLS(ctx, rest[1:])
 	case "verify":
 		return a.runVerify(ctx, rest[1:])
 	case "repair":
@@ -140,21 +140,21 @@ Usage:
   fontpub <command> [options]
 
 Commands:
-  list       List published packages
+  ls-remote  List published packages
   show       Show package metadata and assets
   install    Install a package version locally
   activate   Activate an installed version with symlinks
   deactivate Remove activation symlinks for a package
   update     Install newer published versions
   uninstall  Remove installed package files
-  status     Show installed versions and activation state
+  ls         Show installed versions and activation state
   verify     Check local files and activation symlinks
   repair     Reconcile lockfile and activation state
   package    Publisher manifest commands
   workflow   Publisher workflow generation
 
 Examples:
-  fontpub list --json
+  fontpub ls-remote --json
   fontpub show owner/repo --version 1.2.3
   fontpub install owner/repo --activate --activation-dir ~/Library/Fonts/Fontpub
   fontpub package init /path/to/repo --write
@@ -247,10 +247,10 @@ Generate a starter .github/workflows/fontpub.yml file.
 		}
 	default:
 		switch args[0] {
-		case "list":
+		case "ls-remote":
 			return strings.TrimSpace(`
 Usage:
-  fontpub list [--json]
+  fontpub ls-remote [--json]
 
 List published packages and their latest versions.
 `) + "\n"
@@ -296,10 +296,10 @@ Usage:
 
 Remove installed package files and lockfile entries.
 `) + "\n"
-		case "status":
+		case "ls":
 			return strings.TrimSpace(`
 Usage:
-  fontpub status [<owner>/<repo>] [--activation-dir <path>] [--json]
+  fontpub ls [<owner>/<repo>] [--activation-dir <path>] [--json]
 
 Show installed versions and activation state for the selected directory.
 `) + "\n"

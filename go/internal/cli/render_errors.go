@@ -170,4 +170,3 @@ func isNetworkFailure(err *CLIError, details map[string]any) bool {
 	}
 	return strings.Contains(err.Message, "request failed") || strings.Contains(err.Message, "download failed")
 }
-

@@ -11,13 +11,13 @@ import (
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
-func (a *App) runList(ctx context.Context, args []string) int {
+func (a *App) runLSRemote(ctx context.Context, args []string) int {
 	if len(args) != 0 {
-		return a.fail("list", &CLIError{Code: "INPUT_REQUIRED", Message: "list does not accept positional arguments", Details: map[string]any{}})
+		return a.fail("ls-remote", &CLIError{Code: "INPUT_REQUIRED", Message: "ls-remote does not accept positional arguments", Details: map[string]any{}})
 	}
 	root, err := a.Client.GetRootIndex(ctx)
 	if err != nil {
-		return a.fail("list", asCLIError(err))
+		return a.fail("ls-remote", asCLIError(err))
 	}
 	packageIDs := make([]string, 0, len(root.Packages))
 	for packageID := range root.Packages {
@@ -36,7 +36,7 @@ func (a *App) runList(ctx context.Context, args []string) int {
 	}
 	data := map[string]any{"packages": packages}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "list", Data: data})
+		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "ls-remote", Data: data})
 	}
 	if len(packages) == 0 {
 		fmt.Fprintln(a.Stdout, "no published packages")
@@ -106,17 +106,17 @@ func (a *App) runShow(ctx context.Context, args []string) int {
 	return 0
 }
 
-func (a *App) runStatus(_ context.Context, args []string) int {
+func (a *App) runLS(_ context.Context, args []string) int {
 	activationDir, rest, errObj := extractStringFlag(args, "--activation-dir")
 	if errObj != nil {
-		return a.fail("status", errObj)
+		return a.fail("ls", errObj)
 	}
 	if activationDir == "" {
 		activationDir = a.Config.DefaultActivationDir
 	}
 	var target string
 	if len(rest) > 1 {
-		return a.fail("status", &CLIError{Code: "INPUT_REQUIRED", Message: "status accepts at most one package id", Details: map[string]any{}})
+		return a.fail("ls", &CLIError{Code: "INPUT_REQUIRED", Message: "ls accepts at most one package id", Details: map[string]any{}})
 	}
 	if len(rest) == 1 {
 		target = normalizePackageID(rest[0])
@@ -124,7 +124,7 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 
 	lock, ok, err := LockfileStore{Path: a.Config.LockfilePath()}.Load()
 	if err != nil {
-		return a.fail("status", asCLIError(err))
+		return a.fail("ls", asCLIError(err))
 	}
 	packagesData := map[string]any{}
 	if ok {
@@ -154,15 +154,15 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 	}
 	if target != "" {
 		if _, exists := packagesData[target]; !exists {
-			return a.fail("status", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+			return a.fail("ls", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
 		}
 	}
 
 	data := map[string]any{"packages": packagesData}
 	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "status", Data: data}
+		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "ls", Data: data}
 		if err := protocol.ValidateStatusResult(env); err != nil {
-			return a.fail("status", &CLIError{Code: "INTERNAL_ERROR", Message: "status output validation failed", Details: map[string]any{"reason": err.Error()}})
+			return a.fail("ls", &CLIError{Code: "INTERNAL_ERROR", Message: "ls output validation failed", Details: map[string]any{"reason": err.Error()}})
 		}
 		return a.writeJSON(env)
 	}
