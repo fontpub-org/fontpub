@@ -149,7 +149,7 @@ func (a *App) runPackageValidate(_ context.Context, args []string) int {
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package validate", Data: data})
 	}
-	fmt.Fprintf(a.Stdout, "valid manifest: %s\n", filepath.Join(root, "fontpub.json"))
+	printPackageValidateSummary(a.Stdout, root, manifest)
 	return 0
 }
 
@@ -174,11 +174,7 @@ func (a *App) runPackagePreview(_ context.Context, args []string) int {
 		}
 		return a.writeJSON(env)
 	}
-	body, err := protocol.MarshalCanonical(candidate)
-	if err != nil {
-		return a.fail("package preview", &CLIError{Code: "INTERNAL_ERROR", Message: "could not serialize preview", Details: map[string]any{"reason": err.Error()}})
-	}
-	_, _ = a.Stdout.Write(append(body, '\n'))
+	printPackagePreviewSummary(a.Stdout, candidate)
 	return 0
 }
 
@@ -242,6 +238,6 @@ func (a *App) runPackageCheck(_ context.Context, args []string) int {
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package check", Data: data})
 	}
-	fmt.Fprintln(a.Stdout, "package is ready for publication")
+	printPackageCheckSummary(a.Stdout, root, manifest, tag)
 	return 0
 }

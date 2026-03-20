@@ -1652,6 +1652,49 @@ func TestPackagePreviewJSON(t *testing.T) {
 	}
 }
 
+func TestPackagePreviewHumanReadable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBytes := []byte("preview-font")
+	if err := os.WriteFile(filepath.Join(root, "dist", "ExampleSans-Regular.otf"), fontBytes, 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	manifest := protocol.Manifest{
+		Name:    "Example Sans",
+		Author:  "Example Studio",
+		Version: "1.2.3",
+		License: "OFL-1.1",
+		Files:   []protocol.ManifestFile{{Path: "dist/ExampleSans-Regular.otf", Style: "normal", Weight: 400}},
+	}
+	body, _ := protocol.MarshalCanonical(manifest)
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "preview", root, "--package-id", "Example/Family"}); code != 0 {
+		t.Fatalf("package preview code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Package preview\n",
+		"  package id: example/family\n",
+		"  display name: Example Sans\n",
+		"  version: 1.2.3 (key 1.2.3)\n",
+		"  assets: 1\n",
+		"  root: " + root + "\n",
+		"Assets:\n",
+		"  - dist/ExampleSans-Regular.otf [otf] style=normal weight=400 size=12\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package preview output missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestPackageValidateAndCheck(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
@@ -1688,6 +1731,64 @@ func TestPackageValidateAndCheck(t *testing.T) {
 	stderr.Reset()
 	if code := app.Run(context.Background(), []string{"package", "check", root, "--tag", "v2.0.0", "--json"}); code == 0 {
 		t.Fatalf("expected package check failure")
+	}
+}
+
+func TestPackageValidateAndCheckHumanReadable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dist", "ExampleSans-Regular.otf"), []byte("font"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	manifest := protocol.Manifest{
+		Name:    "Example Sans",
+		Author:  "Example Studio",
+		Version: "1.2.3",
+		License: "OFL-1.1",
+		Files:   []protocol.ManifestFile{{Path: "dist/ExampleSans-Regular.otf", Style: "normal", Weight: 400}},
+	}
+	body, _ := protocol.MarshalCanonical(manifest)
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "validate", root}); code != 0 {
+		t.Fatalf("package validate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Manifest is valid\n",
+		"  path: " + filepath.Join(root, "fontpub.json") + "\n",
+		"  root: " + root + "\n",
+		"  files checked: 1\n",
+		"  version: 1.2.3\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package validate output missing %q\n%s", want, output)
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"package", "check", root, "--tag", "v1.2.3"}); code != 0 {
+		t.Fatalf("package check code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output = stdout.String()
+	for _, want := range []string{
+		"Package is ready for publication\n",
+		"  root: " + root + "\n",
+		"  manifest: " + filepath.Join(root, "fontpub.json") + "\n",
+		"  files checked: 1\n",
+		"  version: 1.2.3\n",
+		"  tag: v1.2.3\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package check output missing %q\n%s", want, output)
+		}
 	}
 }
 

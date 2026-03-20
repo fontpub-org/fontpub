@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
@@ -84,6 +85,41 @@ func printInspectionSummary(w io.Writer, info inspection) {
 	}
 	fmt.Fprintf(w, "Style: %s (%s)\n", info.Style, humanizeInferenceSource(info.styleSource))
 	fmt.Fprintf(w, "Weight: %d (%s)\n", info.Weight, humanizeInferenceSource(info.weightSource))
+}
+
+func printPackageValidateSummary(w io.Writer, root string, manifest protocol.Manifest) {
+	fmt.Fprintln(w, "Manifest is valid")
+	fmt.Fprintf(w, "  path: %s\n", filepath.Join(root, "fontpub.json"))
+	fmt.Fprintf(w, "  root: %s\n", root)
+	fmt.Fprintf(w, "  files checked: %d\n", len(manifest.Files))
+	fmt.Fprintf(w, "  version: %s\n", manifest.Version)
+}
+
+func printPackagePreviewSummary(w io.Writer, candidate protocol.CandidatePackageDetail) {
+	fmt.Fprintln(w, "Package preview")
+	fmt.Fprintf(w, "  package id: %s\n", candidate.PackageID)
+	fmt.Fprintf(w, "  display name: %s\n", candidate.DisplayName)
+	fmt.Fprintf(w, "  version: %s (key %s)\n", candidate.Version, candidate.VersionKey)
+	fmt.Fprintf(w, "  author: %s\n", candidate.Author)
+	fmt.Fprintf(w, "  assets: %d\n", len(candidate.Assets))
+	fmt.Fprintf(w, "  root: %s\n", candidate.Source.RootPath)
+	if len(candidate.Assets) > 0 {
+		fmt.Fprintln(w, "Assets:")
+		for _, asset := range candidate.Assets {
+			fmt.Fprintf(w, "  - %s [%s] style=%s weight=%d size=%d\n", asset.Path, asset.Format, asset.Style, asset.Weight, asset.SizeBytes)
+		}
+	}
+}
+
+func printPackageCheckSummary(w io.Writer, root string, manifest protocol.Manifest, tag string) {
+	fmt.Fprintln(w, "Package is ready for publication")
+	fmt.Fprintf(w, "  root: %s\n", root)
+	fmt.Fprintf(w, "  manifest: %s\n", filepath.Join(root, "fontpub.json"))
+	fmt.Fprintf(w, "  files checked: %d\n", len(manifest.Files))
+	fmt.Fprintf(w, "  version: %s\n", manifest.Version)
+	if tag != "" {
+		fmt.Fprintf(w, "  tag: %s\n", tag)
+	}
 }
 
 func humanizeInferenceSource(source string) string {

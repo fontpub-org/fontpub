@@ -203,6 +203,7 @@ The CLI has two top-level command groups:
 - Verify that all declared files exist
 - Verify path, version, license, and file-entry constraints
 - MUST support `--json`
+- In human-readable mode, `validate` SHOULD summarize the manifest path, root path, checked file count, and version
 
 ### `fontpub package preview [PATH] [--package-id <owner>/<repo>]`
 
@@ -214,6 +215,7 @@ The CLI has two top-level command groups:
 - MUST NOT publish anything
 - preview output MUST NOT be treated as byte-identical to a published versioned package detail document
 - MUST support `--json`
+- In human-readable mode, `preview` SHOULD summarize package identity, version, asset count, and root path before listing assets
 
 ### `fontpub package inspect <font-file>`
 
@@ -229,6 +231,7 @@ The CLI has two top-level command groups:
   - file existence
   - tag/version consistency if `--tag <tag>` was provided
 - MUST support `--json`
+- In human-readable mode, `check` SHOULD summarize the root path, manifest path, checked file count, version, and tag when provided
 
 ### `fontpub workflow init`
 
