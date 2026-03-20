@@ -172,12 +172,7 @@ The CLI has two top-level command groups:
 - MUST support `--yes`
 - MUST support `--json`
 
-### Compatibility aliases
-
-- Implementations MAY support `fontpub list` as a compatibility alias for `fontpub ls-remote`
-- Implementations MAY support `fontpub status` as a compatibility alias for `fontpub ls`
-- Help output SHOULD prefer the canonical names `ls-remote` and `ls`
-- If compatibility aliases are supported, new documentation and examples SHOULD prefer `ls-remote` and `ls`
+- Help output SHOULD use the canonical names `ls-remote` and `ls`
 
 ## Publisher commands
 
@@ -288,7 +283,7 @@ When `--json` is set:
 
 ## Activation directory
 
-- Commands that read or modify activation state (`activate`, `deactivate`, `status`, `verify`, `repair`, `uninstall`) MUST support `--activation-dir <path>`.
+- Commands that read or modify activation state (`activate`, `deactivate`, `ls`, `verify`, `repair`, `uninstall`) MUST support `--activation-dir <path>`.
 - Commands that can immediately activate as part of another operation (`install --activate`, `update --activate`) MUST also support `--activation-dir <path>`.
 - When `--activation-dir` is provided, activation behavior is defined entirely against that directory.
 - Implementations MAY provide a platform default activation directory when `--activation-dir` is omitted.
@@ -306,7 +301,7 @@ Symlink naming:
 Activation safety rules:
 - The CLI MUST use the validated asset basename exactly as published in the package detail.
 - The CLI MUST NOT interpret asset basenames as path components, option flags, or shell fragments.
-- `status`, `verify`, and `repair` MUST evaluate activation state against the effective activation directory selected by `--activation-dir` or the implementation default.
+- `ls`, `verify`, and `repair` MUST evaluate activation state against the effective activation directory selected by `--activation-dir` or the implementation default.
 
 If a symlink name would collide:
 - The CLI MUST make the name unique by appending `--<shortsha>` where `shortsha` is the first 8 chars of the asset SHA-256.

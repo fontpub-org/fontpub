@@ -149,13 +149,6 @@ go run ./cmd/fontpub ls --json
 go run ./cmd/fontpub show owner/repo --json
 ```
 
-During a migration period, implementations may also continue to support:
-
-```bash
-go run ./cmd/fontpub list --json     # compatibility alias for ls-remote
-go run ./cmd/fontpub status --json   # compatibility alias for ls
-```
-
 To exercise install and activation flows, you need a running Fontpub metadata service and published package metadata.
 
 ## Run The Local Operator Binaries
