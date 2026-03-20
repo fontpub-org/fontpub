@@ -70,6 +70,7 @@ The CLI has two top-level command groups:
 - Fetch `/v1/index.json` using `ETag`
 - Print available packages and latest versions
 - MUST support `--json`
+- In human-readable mode, `list` SHOULD emphasize package ID, latest version, and published date in a scannable layout
 
 ### `fontpub show <owner>/<repo> [--version <v>]`
 
@@ -78,6 +79,7 @@ The CLI has two top-level command groups:
   - `/v1/packages/<owner>/<repo>/versions/<version_key>.json` if `--version <v>` is provided
 - Show package metadata and assets
 - MUST support `--json`
+- In human-readable mode, `show` SHOULD summarize package metadata before listing assets
 
 ### `fontpub install <owner>/<repo> [--version <v>] [--activate] [--activation-dir <path>]`
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
@@ -42,16 +43,35 @@ func (a *App) runList(ctx context.Context, args []string) int {
 		return 0
 	}
 	fmt.Fprintln(a.Stdout, "Available packages:")
+	packageWidth := len("package")
+	versionWidth := len("latest")
+	for _, pkg := range packages {
+		if n := len(stringValue(pkg["package_id"])); n > packageWidth {
+			packageWidth = n
+		}
+		if n := len(stringValue(pkg["latest_version"])); n > versionWidth {
+			versionWidth = n
+		}
+	}
 	for _, pkg := range packages {
 		fmt.Fprintf(
 			a.Stdout,
-			"  - %s (latest %s, published %s)\n",
+			"  - %-*s  latest %-*s  published %s\n",
+			packageWidth,
 			pkg["package_id"],
+			versionWidth,
 			pkg["latest_version"],
-			pkg["latest_published_at"],
+			humanDate(stringValue(pkg["latest_published_at"])),
 		)
 	}
 	return 0
+}
+
+func humanDate(value string) string {
+	if ts, err := time.Parse(time.RFC3339, value); err == nil {
+		return ts.Format("2006-01-02")
+	}
+	return value
 }
 
 func (a *App) runShow(ctx context.Context, args []string) int {

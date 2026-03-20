@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
@@ -89,21 +90,29 @@ func printPackageDetailSummary(w io.Writer, detail protocol.VersionedPackageDeta
 	fmt.Fprintf(w, "Author: %s\n", detail.Author)
 	fmt.Fprintf(w, "License: %s\n", detail.License)
 	fmt.Fprintf(w, "Version: %s (key %s)\n", detail.Version, detail.VersionKey)
-	fmt.Fprintf(w, "Published at: %s\n", detail.PublishedAt)
-	fmt.Fprintf(w, "GitHub: %s/%s @ %s\n", detail.GitHub.Owner, detail.GitHub.Repo, detail.GitHub.SHA)
-	fmt.Fprintf(w, "Manifest URL: %s\n", detail.ManifestURL)
+	fmt.Fprintf(w, "Published: %s\n", detail.PublishedAt)
+	fmt.Fprintf(w, "GitHub: %s/%s @ %s\n", detail.GitHub.Owner, detail.GitHub.Repo, shortSHA(detail.GitHub.SHA))
+	fmt.Fprintf(w, "Manifest: %s\n", detail.ManifestURL)
 	fmt.Fprintln(w, "Assets:")
 	for _, asset := range detail.Assets {
 		fmt.Fprintf(
 			w,
-			"  - %s [%s] style=%s weight=%d size=%d\n",
-			asset.Path,
+			"  - %s [%s] path=%s style=%s weight=%d size=%d\n",
+			filepath.Base(filepath.FromSlash(asset.Path)),
 			asset.Format,
+			asset.Path,
 			asset.Style,
 			asset.Weight,
 			asset.SizeBytes,
 		)
 	}
+}
+
+func shortSHA(value string) string {
+	if len(value) > 12 {
+		return value[:12]
+	}
+	return value
 }
 
 func printPackageCheckResults(w io.Writer, header string, results []PackageCheckResult) {

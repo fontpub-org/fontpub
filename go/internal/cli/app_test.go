@@ -119,7 +119,8 @@ func TestRunListHumanReadable(t *testing.T) {
 	output := stdout.String()
 	for _, want := range []string{
 		"Available packages:\n",
-		"  - example/family (latest 1.2.3, published 2026-01-02T00:00:00Z)\n",
+		"  - example/family  latest 1.2.3",
+		"published 2026-01-02\n",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("list output missing %q\n%s", want, output)
@@ -246,9 +247,11 @@ func TestRunShowHumanReadable(t *testing.T) {
 		"Package: example/family\n",
 		"Display name: Example Sans\n",
 		"Version: 1.2.3 (key 1.2.3)\n",
-		"GitHub: example/family @ 0123456789abcdef0123456789abcdef01234567\n",
+		"Published: 2026-01-02T00:00:00Z\n",
+		"GitHub: example/family @ 0123456789ab\n",
+		"Manifest: https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json\n",
 		"Assets:\n",
-		"  - dist/ExampleSans-Regular.otf [otf] style=normal weight=400 size=11\n",
+		"  - ExampleSans-Regular.otf [otf] path=dist/ExampleSans-Regular.otf style=normal weight=400 size=11\n",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("show output missing %q\n%s", want, output)
