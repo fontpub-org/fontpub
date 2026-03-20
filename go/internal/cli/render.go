@@ -106,6 +106,7 @@ func printPackageDetailSummary(w io.Writer, detail protocol.VersionedPackageDeta
 			asset.SizeBytes,
 		)
 	}
+	printNextHints(w, fmt.Sprintf("run: fontpub install %s --version %s", detail.PackageID, detail.Version))
 }
 
 func shortSHA(value string) string {

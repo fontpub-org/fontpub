@@ -312,6 +312,8 @@ func TestRunShowHumanReadable(t *testing.T) {
 		"Manifest: https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json\n",
 		"Assets:\n",
 		"  - ExampleSans-Regular.otf [otf] path=dist/ExampleSans-Regular.otf style=normal weight=400 size=11\n",
+		"Next:\n",
+		"  run: fontpub install example/family --version 1.2.3\n",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("show output missing %q\n%s", want, output)
@@ -2336,6 +2338,9 @@ func TestPackageInspectHumanReadable(t *testing.T) {
 		"Family: Embedded Family (embedded metadata)",
 		"Style: italic (embedded metadata)",
 		"Weight: 700 (embedded metadata)",
+		"Next:\n",
+		"  run: fontpub package init [PATH]\n",
+		"  review fontpub.json with these inferred family/style/weight values\n",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("package inspect output missing %q\n%s", want, output)

@@ -89,6 +89,7 @@ The CLI has two top-level command groups:
 - Show package metadata and assets
 - MUST support `--json`
 - In human-readable mode, `show` SHOULD summarize package metadata before listing assets
+- In human-readable mode, `show` SHOULD suggest an `install` command for the displayed package version
 
 ### `fontpub install <owner>/<repo> [--version <v>] [--activate] [--activation-dir <path>]`
 
@@ -228,6 +229,7 @@ The CLI has two top-level command groups:
 - Inspect a font file and print metadata useful for manifest generation
 - MAY include family name, style, weight, and format inference
 - MUST support `--json`
+- In human-readable mode, `inspect` SHOULD suggest `package init` or manifest review as the next step
 
 ### `fontpub package check [--tag <tag>]`
 

@@ -85,6 +85,10 @@ func printInspectionSummary(w io.Writer, info inspection) {
 	}
 	fmt.Fprintf(w, "Style: %s (%s)\n", info.Style, humanizeInferenceSource(info.styleSource))
 	fmt.Fprintf(w, "Weight: %d (%s)\n", info.Weight, humanizeInferenceSource(info.weightSource))
+	printNextHints(w,
+		"run: fontpub package init [PATH]",
+		"review fontpub.json with these inferred family/style/weight values",
+	)
 }
 
 func printPackageValidateSummary(w io.Writer, root string, manifest protocol.Manifest) {
