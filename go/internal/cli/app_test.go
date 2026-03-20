@@ -858,6 +858,43 @@ func TestPackageInitHumanReadableSummary(t *testing.T) {
 	}
 }
 
+func TestPackageInitWriteHumanReadable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "OTTO", "Embedded Family", "Bold Italic", 700, true)
+	if err := os.WriteFile(filepath.Join(root, "dist", "Misleading-Regular.otf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--write", "--yes"}); code != 0 {
+		t.Fatalf("package init write code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Wrote fontpub.json\n",
+		"  path: " + filepath.Join(root, "fontpub.json") + "\n",
+		"  files discovered: 1\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package init write output missing %q\n%s", want, output)
+		}
+	}
+	body, err := os.ReadFile(filepath.Join(root, "fontpub.json"))
+	if err != nil {
+		t.Fatalf("os.ReadFile manifest: %v", err)
+	}
+	if !strings.Contains(string(body), `"name":"Embedded Family"`) {
+		t.Fatalf("manifest was not rewritten with inferred name:\n%s", string(body))
+	}
+}
+
 func TestPackageInitJSONPrefersEmbeddedMetadata(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
@@ -1397,6 +1434,34 @@ func TestWorkflowInitDryRunAndWrite(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated workflow missing %q\n%s", want, text)
 		}
+	}
+}
+
+func TestWorkflowInitHumanReadableDryRunAndWrite(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"workflow", "init", root, "--dry-run"}); code != 0 {
+		t.Fatalf("workflow init dry-run code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Workflow write plan\n",
+		"  path: " + filepath.Join(root, ".github", "workflows", "fontpub.yml") + "\n",
+		"Planned actions:\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("workflow dry-run output missing %q\n%s", want, output)
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"workflow", "init", root, "--yes"}); code != 0 {
+		t.Fatalf("workflow init write code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if output := stdout.String(); !strings.Contains(output, "Wrote workflow\n") || !strings.Contains(output, "  path: "+filepath.Join(root, ".github", "workflows", "fontpub.yml")+"\n") {
+		t.Fatalf("unexpected workflow write output:\n%s", output)
 	}
 }
 

@@ -85,6 +85,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 
 	if writeFile {
 		target := filepath.Join(root, "fontpub.json")
+		planned := []PlannedAction{{Type: "write_manifest", Path: target}}
 		if _, err := os.Stat(target); err == nil && !yes {
 			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "refusing to overwrite existing fontpub.json without --yes", Details: map[string]any{"path": target}})
 		}
@@ -98,10 +99,15 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 			}
 		}
 		if dryRun {
-			fmt.Fprintf(a.Stdout, "manifest ready (dry-run): %s\n", target)
+			fmt.Fprintln(a.Stdout, "Manifest write plan")
+			fmt.Fprintf(a.Stdout, "  path: %s\n", target)
+			fmt.Fprintf(a.Stdout, "  files discovered: %d\n", len(manifest.Files))
+			printPlannedActions(a.Stdout, planned)
 			return 0
 		}
-		fmt.Fprintf(a.Stdout, "manifest ready: %s\n", target)
+		fmt.Fprintln(a.Stdout, "Wrote fontpub.json")
+		fmt.Fprintf(a.Stdout, "  path: %s\n", target)
+		fmt.Fprintf(a.Stdout, "  files discovered: %d\n", len(manifest.Files))
 		return 0
 	}
 
