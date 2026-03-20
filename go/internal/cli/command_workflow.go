@@ -17,7 +17,7 @@ func (a *App) runWorkflow(ctx context.Context, args []string) int {
 	case "init":
 		return a.runWorkflowInit(ctx, args[1:])
 	default:
-		return a.fail("workflow "+args[0], &CLIError{Code: "INTERNAL_ERROR", Message: "workflow subcommand is not implemented", Details: map[string]any{"command": args[0]}})
+		return a.fail("workflow", &CLIError{Code: "INPUT_REQUIRED", Message: "unknown workflow subcommand", Details: map[string]any{"subcommand": args[0]}})
 	}
 }
 

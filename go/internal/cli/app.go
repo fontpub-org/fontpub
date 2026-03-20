@@ -83,7 +83,7 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	case "workflow":
 		return a.runWorkflow(ctx, rest[1:])
 	default:
-		return a.fail(a.Command, &CLIError{Code: "INTERNAL_ERROR", Message: "command is not implemented", Details: map[string]any{"command": rest[0]}})
+		return a.fail("", &CLIError{Code: "INPUT_REQUIRED", Message: "unknown command", Details: map[string]any{"command": rest[0]}})
 	}
 }
 

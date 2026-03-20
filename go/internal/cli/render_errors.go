@@ -14,6 +14,8 @@ var humanErrorDetailOrder = []string{
 	"version_key",
 	"version",
 	"flag",
+	"command",
+	"subcommand",
 	"status",
 	"url",
 	"symlink_path",
@@ -135,6 +137,16 @@ func inputRequiredHints(command string, err *CLIError, details map[string]any) [
 		return []string{"pass --activation-dir <path> or set FONTPUB_ACTIVATION_DIR"}
 	case err.Message == "command is required":
 		return []string{"run: fontpub --help"}
+	case err.Message == "unknown command":
+		return []string{"run: fontpub --help"}
+	case err.Message == "package subcommand is required":
+		return []string{"run: fontpub package --help"}
+	case err.Message == "workflow subcommand is required":
+		return []string{"run: fontpub workflow --help"}
+	case err.Message == "unknown package subcommand":
+		return []string{"run: fontpub package --help"}
+	case err.Message == "unknown workflow subcommand":
+		return []string{"run: fontpub workflow --help"}
 	case err.Message == "unknown flag" || err.Message == "missing flag value":
 		if command == "" {
 			return []string{"run: fontpub --help"}

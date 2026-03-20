@@ -25,7 +25,7 @@ func (a *App) runPackage(ctx context.Context, args []string) int {
 	case "check":
 		return a.runPackageCheck(ctx, args[1:])
 	default:
-		return a.fail("package "+args[0], &CLIError{Code: "INTERNAL_ERROR", Message: "package subcommand is not implemented", Details: map[string]any{"command": args[0]}})
+		return a.fail("package", &CLIError{Code: "INPUT_REQUIRED", Message: "unknown package subcommand", Details: map[string]any{"subcommand": args[0]}})
 	}
 }
 

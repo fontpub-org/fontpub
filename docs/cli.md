@@ -262,6 +262,7 @@ For mutating commands in human-readable mode:
 For failures in human-readable mode:
 - error output SHOULD include the relevant structured details when available, such as `path`, `package_id`, `version_key`, or `flag`
 - error output SHOULD include a concise next step when the CLI can determine one
+- unknown commands and missing subcommands SHOULD direct the user to the relevant `--help` output
 - `verify` and `repair` failure output SHOULD include finding-specific details such as `local_path`, `symlink_path`, and `reason` when available
 
 ### JSON output

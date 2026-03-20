@@ -151,6 +151,29 @@ func TestUnknownFlagPrintsHelpHint(t *testing.T) {
 	}
 }
 
+func TestUnknownCommandPrintsHelpHint(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"list"}); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INPUT_REQUIRED: unknown command\n",
+		"  command: list\n",
+		"Next:\n",
+		"  run: fontpub --help\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestRunShowJSONLatestAndVersion(t *testing.T) {
 	client := &MetadataClient{
 		BaseURL:   "https://fontpub.org",
@@ -521,8 +544,69 @@ func TestLegacyListAndStatusCommandsAreRejected(t *testing.T) {
 			if code := app.Run(context.Background(), args); code == 0 {
 				t.Fatalf("expected failure for %v", args)
 			}
-			if output := stderr.String(); !strings.Contains(output, "command is not implemented\n") {
+			output := stderr.String()
+			if !strings.Contains(output, "INPUT_REQUIRED: unknown command\n") {
 				t.Fatalf("unexpected stderr for %v:\n%s", args, output)
+			}
+			if !strings.Contains(output, "  run: fontpub --help\n") {
+				t.Fatalf("missing help hint for %v:\n%s", args, output)
+			}
+		})
+	}
+}
+
+func TestPackageAndWorkflowSubcommandHints(t *testing.T) {
+	tests := []struct {
+		args []string
+		want []string
+	}{
+		{
+			args: []string{"package"},
+			want: []string{
+				"INPUT_REQUIRED: package subcommand is required\n",
+				"Next:\n",
+				"  run: fontpub package --help\n",
+			},
+		},
+		{
+			args: []string{"workflow"},
+			want: []string{
+				"INPUT_REQUIRED: workflow subcommand is required\n",
+				"Next:\n",
+				"  run: fontpub workflow --help\n",
+			},
+		},
+		{
+			args: []string{"package", "bogus"},
+			want: []string{
+				"INPUT_REQUIRED: unknown package subcommand\n",
+				"  subcommand: bogus\n",
+				"Next:\n",
+				"  run: fontpub package --help\n",
+			},
+		},
+		{
+			args: []string{"workflow", "bogus"},
+			want: []string{
+				"INPUT_REQUIRED: unknown workflow subcommand\n",
+				"  subcommand: bogus\n",
+				"Next:\n",
+				"  run: fontpub workflow --help\n",
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(strings.Join(tc.args, "_"), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+			if code := app.Run(context.Background(), tc.args); code == 0 {
+				t.Fatalf("expected failure for %v", tc.args)
+			}
+			output := stderr.String()
+			for _, want := range tc.want {
+				if !strings.Contains(output, want) {
+					t.Fatalf("stderr missing %q\n%s", want, output)
+				}
 			}
 		})
 	}
