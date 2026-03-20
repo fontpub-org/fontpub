@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
-	"github.com/fontpub-org/fontpub/go/internal/indexer/derive"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/deriveddocs"
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
@@ -74,35 +74,11 @@ func (r Rebuilder) RebuildPackage(ctx context.Context, packageID string) (Result
 }
 
 func (r Rebuilder) writePackageDerived(ctx context.Context, packageID string, details []protocol.VersionedPackageDetail) error {
-	packageIndex, latestDetail, err := derive.BuildPackageVersionsIndex(packageID, append([]protocol.VersionedPackageDetail(nil), details...))
-	if err != nil {
-		return err
-	}
-	packageIndexBytes, err := protocol.MarshalCanonical(packageIndex)
-	if err != nil {
-		return err
-	}
-	if err := r.Store.PutPackageVersionsIndex(ctx, packageID, packageIndex, packageIndexBytes, derive.ComputeETag(packageIndexBytes)); err != nil {
-		return err
-	}
-	latestBytes, err := protocol.MarshalCanonical(latestDetail)
-	if err != nil {
-		return err
-	}
-	if err := r.Store.PutLatestAlias(ctx, packageID, latestBytes, derive.ComputeETag(latestBytes)); err != nil {
-		return err
-	}
-	return nil
+	_, err := deriveddocs.WritePackage(ctx, r.Store, packageID, details)
+	return err
 }
 
 func (r Rebuilder) writeRootIndex(ctx context.Context, allDetails []protocol.VersionedPackageDetail) error {
-	rootIndex, err := derive.BuildRootIndex(allDetails)
-	if err != nil {
-		return err
-	}
-	rootBytes, err := protocol.MarshalCanonical(rootIndex)
-	if err != nil {
-		return err
-	}
-	return r.Store.PutRootIndex(ctx, rootIndex, rootBytes, derive.ComputeETag(rootBytes))
+	_, err := deriveddocs.WriteRoot(ctx, r.Store, allDetails)
+	return err
 }
