@@ -153,13 +153,6 @@ Commands:
   package    Publisher manifest commands
   workflow   Publisher workflow generation
 
-Examples:
-  fontpub ls-remote --json
-  fontpub show owner/repo --version 1.2.3
-  fontpub install owner/repo --activate --activation-dir ~/Library/Fonts/Fontpub
-  fontpub package init /path/to/repo --write
-  fontpub workflow init /path/to/repo --yes
-
 Environment:
   FONTPUB_BASE_URL         Override the metadata service base URL
   FONTPUB_STATE_DIR        Override the local state directory

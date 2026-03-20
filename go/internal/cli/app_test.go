@@ -640,7 +640,7 @@ func TestHelpOutput(t *testing.T) {
 	}
 }
 
-func TestHelpOutputIncludesDescriptionsAndExamples(t *testing.T) {
+func TestHelpOutputIncludesDescriptionsAndEnvironment(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
 	if code := app.Run(context.Background(), []string{"--help"}); code != 0 {
