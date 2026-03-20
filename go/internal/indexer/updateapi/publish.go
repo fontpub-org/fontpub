@@ -9,6 +9,7 @@ import (
 
 	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
 	"github.com/fontpub-org/fontpub/go/internal/indexer/derive"
+	"github.com/fontpub-org/fontpub/go/internal/indexer/deriveddocs"
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
@@ -84,42 +85,23 @@ func (p PublishingProcessor) Publish(ctx context.Context, req UpdateRequest, val
 	if err != nil {
 		return nil, internalError(err.Error()), http.StatusInternalServerError
 	}
-	packageIndex, latestDetail, err := derive.BuildPackageVersionsIndex(validated.PackageID, packageDetails)
+	packageWrite, err := deriveddocs.WritePackage(ctx, p.ArtifactStore, validated.PackageID, packageDetails)
 	if err != nil {
-		return nil, internalError(err.Error()), http.StatusInternalServerError
-	}
-	packageIndexBytes, err := protocol.MarshalCanonical(packageIndex)
-	if err != nil {
-		return nil, internalError(err.Error()), http.StatusInternalServerError
-	}
-	packageIndexETag := derive.ComputeETag(packageIndexBytes)
-	if err := p.ArtifactStore.PutPackageVersionsIndex(ctx, validated.PackageID, packageIndex, packageIndexBytes, packageIndexETag); err != nil {
 		return nil, indexConflict(err), http.StatusServiceUnavailable
 	}
 
-	latestAliasUpdated := latestDetail.VersionKey == detail.VersionKey
+	latestAliasUpdated := packageWrite.LatestDetail.VersionKey == detail.VersionKey
 	latestAliasETag := ""
 	if latestAliasUpdated {
-		if err := p.ArtifactStore.PutLatestAlias(ctx, validated.PackageID, detailBytes, detailETag); err != nil {
-			return nil, indexConflict(err), http.StatusServiceUnavailable
-		}
-		latestAliasETag = detailETag
+		latestAliasETag = packageWrite.LatestAliasETag
 	}
 
 	allDetails, err := p.ArtifactStore.ListAllVersionedPackageDetails(ctx)
 	if err != nil {
 		return nil, internalError(err.Error()), http.StatusInternalServerError
 	}
-	rootIndex, err := derive.BuildRootIndex(allDetails)
+	rootIndexETag, err := deriveddocs.WriteRoot(ctx, p.ArtifactStore, allDetails)
 	if err != nil {
-		return nil, internalError(err.Error()), http.StatusInternalServerError
-	}
-	rootIndexBytes, err := protocol.MarshalCanonical(rootIndex)
-	if err != nil {
-		return nil, internalError(err.Error()), http.StatusInternalServerError
-	}
-	rootIndexETag := derive.ComputeETag(rootIndexBytes)
-	if err := p.ArtifactStore.PutRootIndex(ctx, rootIndex, rootIndexBytes, rootIndexETag); err != nil {
 		return nil, indexConflict(err), http.StatusServiceUnavailable
 	}
 
@@ -136,7 +118,7 @@ func (p PublishingProcessor) Publish(ctx context.Context, req UpdateRequest, val
 			},
 			"package_versions_index": map[string]any{
 				"path": artifacts.PackageVersionsIndexPath(detail.PackageID),
-				"etag": packageIndexETag,
+				"etag": packageWrite.PackageIndexETag,
 			},
 			"latest_package_alias": map[string]any{
 				"path":    artifacts.LatestAliasPath(detail.PackageID),
