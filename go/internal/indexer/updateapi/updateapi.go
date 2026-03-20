@@ -36,73 +36,43 @@ type Server struct {
 }
 
 func (s Server) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", s.handleHealthz)
-	mux.HandleFunc("/v1/update", s.handleUpdate)
+	mux := s.routes()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/healthz" && r.URL.Path != "/v1/update" {
-			httpx.WriteError(w, http.StatusNotFound, "INTERNAL_ERROR", "route not found", map[string]any{
-				"path": r.URL.Path,
-			})
+			s.writeRouteNotFound(w, r)
 			return
 		}
 		mux.ServeHTTP(w, r)
 	})
 }
 
+func (s Server) routes() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", s.handleHealthz)
+	mux.HandleFunc("/v1/update", s.handleUpdate)
+	return mux
+}
+
+func (s Server) writeRouteNotFound(w http.ResponseWriter, r *http.Request) {
+	httpx.WriteError(w, http.StatusNotFound, "INTERNAL_ERROR", "route not found", map[string]any{
+		"path": r.URL.Path,
+	})
+}
+
 func (s Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		httpx.WriteError(w, http.StatusMethodNotAllowed, "INTERNAL_ERROR", "method not allowed", map[string]any{
-			"method": r.Method,
-		})
+	if !methodAllowed(w, r, http.MethodGet) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpx.WriteError(w, http.StatusMethodNotAllowed, "INTERNAL_ERROR", "method not allowed", map[string]any{
-			"method": r.Method,
-		})
+	if !methodAllowed(w, r, http.MethodPost) {
 		return
 	}
 
-	req, errObj, status := ParseUpdateRequest(r.Body)
+	req, claims, errObj, status := s.authorizeUpdateRequest(r)
 	if errObj != nil {
-		httpx.WriteJSON(w, status, protocol.ErrorEnvelope{Error: *errObj})
-		return
-	}
-
-	rawToken, errObj, status := ExtractBearerToken(r.Header)
-	if errObj != nil {
-		httpx.WriteJSON(w, status, protocol.ErrorEnvelope{Error: *errObj})
-		return
-	}
-
-	if s.Verifier == nil {
-		httpx.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "token verifier is not configured", nil)
-		return
-	}
-
-	claims, err := s.Verifier.Verify(r.Context(), rawToken)
-	if err != nil {
-		httpx.WriteError(w, http.StatusUnauthorized, "AUTH_INVALID_TOKEN", "invalid bearer token", map[string]any{
-			"reason": err.Error(),
-		})
-		return
-	}
-	if err := protocol.ValidateOIDCClaims(claims); err != nil {
-		httpx.WriteJSON(w, statusFromProtocolError(err.Error()), protocol.ErrorEnvelope{
-			Error: protocol.ErrorObject{
-				Code:    codeFromProtocolError(err.Error()),
-				Message: err.Error(),
-				Details: map[string]any{},
-			},
-		})
-		return
-	}
-	if errObj, status := ValidateRequestMatchesClaims(req, claims); errObj != nil {
 		httpx.WriteJSON(w, status, protocol.ErrorEnvelope{Error: *errObj})
 		return
 	}
@@ -113,6 +83,59 @@ func (s Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	status, body := s.Processor.Process(r.Context(), req, claims)
 	httpx.WriteJSON(w, status, body)
+}
+
+func (s Server) authorizeUpdateRequest(r *http.Request) (UpdateRequest, protocol.OIDCClaims, *protocol.ErrorObject, int) {
+	req, errObj, status := ParseUpdateRequest(r.Body)
+	if errObj != nil {
+		return UpdateRequest{}, protocol.OIDCClaims{}, errObj, status
+	}
+	rawToken, errObj, status := ExtractBearerToken(r.Header)
+	if errObj != nil {
+		return UpdateRequest{}, protocol.OIDCClaims{}, errObj, status
+	}
+	claims, errObj, status := s.verifyClaims(r.Context(), rawToken)
+	if errObj != nil {
+		return UpdateRequest{}, protocol.OIDCClaims{}, errObj, status
+	}
+	if errObj, status := ValidateRequestMatchesClaims(req, claims); errObj != nil {
+		return UpdateRequest{}, protocol.OIDCClaims{}, errObj, status
+	}
+	return req, claims, nil, http.StatusOK
+}
+
+func (s Server) verifyClaims(ctx context.Context, rawToken string) (protocol.OIDCClaims, *protocol.ErrorObject, int) {
+	if s.Verifier == nil {
+		return protocol.OIDCClaims{}, internalError("token verifier is not configured"), http.StatusInternalServerError
+	}
+	claims, err := s.Verifier.Verify(ctx, rawToken)
+	if err != nil {
+		return protocol.OIDCClaims{}, errorObject("AUTH_INVALID_TOKEN", "invalid bearer token", map[string]any{
+			"reason": err.Error(),
+		}), http.StatusUnauthorized
+	}
+	if err := protocol.ValidateOIDCClaims(claims); err != nil {
+		return protocol.OIDCClaims{}, protocolErrorObject(err.Error()), statusFromProtocolError(err.Error())
+	}
+	return claims, nil, http.StatusOK
+}
+
+func protocolErrorObject(message string) *protocol.ErrorObject {
+	return &protocol.ErrorObject{
+		Code:    codeFromProtocolError(message),
+		Message: message,
+		Details: map[string]any{},
+	}
+}
+
+func methodAllowed(w http.ResponseWriter, r *http.Request, want string) bool {
+	if r.Method == want {
+		return true
+	}
+	httpx.WriteError(w, http.StatusMethodNotAllowed, "INTERNAL_ERROR", "method not allowed", map[string]any{
+		"method": r.Method,
+	})
+	return false
 }
 
 func ParseUpdateRequest(r io.Reader) (UpdateRequest, *protocol.ErrorObject, int) {
