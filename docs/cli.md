@@ -30,6 +30,9 @@ Rules:
 - `--help` MUST take precedence over normal command execution.
 - `--help` output is not part of the CLI JSON contract and MUST NOT require `--json`.
 - Implementations MAY support `help` as an alias, but `--help` is the normative interface in v1.
+- Help output SHOULD include short command descriptions.
+- Help output SHOULD include representative examples for command groups and subcommands.
+- Top-level help SHOULD mention the main environment variables that affect CLI behavior.
 
 ### Human-oriented behavior
 

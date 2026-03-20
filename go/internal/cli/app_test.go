@@ -370,6 +370,34 @@ func TestHelpOutput(t *testing.T) {
 	}
 }
 
+func TestHelpOutputIncludesDescriptionsAndExamples(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"--help"}); code != 0 {
+		t.Fatalf("help code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"list       List published packages\n",
+		"status     Show installed versions and activation state\n",
+		"Environment:\n",
+		"FONTPUB_ACTIVATION_DIR   Default activation directory for activation commands\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("top-level help missing %q\n%s", want, output)
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"package", "--help"}); code != 0 {
+		t.Fatalf("package help code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if output := stdout.String(); !strings.Contains(output, "fontpub package preview /path/to/repo --package-id owner/repo --json\n") {
+		t.Fatalf("package help missing example:\n%s", output)
+	}
+}
+
 func TestInstallActivateVerifyRepairAndUninstall(t *testing.T) {
 	stateDir := t.TempDir()
 	activationDir := t.TempDir()
