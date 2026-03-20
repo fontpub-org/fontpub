@@ -6,7 +6,7 @@ func TestValidateCLISchemaAcceptsValidEnvelope(t *testing.T) {
 	env := CLIEnvelope{
 		SchemaVersion: "1",
 		OK:            true,
-		Command:       "list",
+		Command:       "ls-remote",
 		Data: map[string]any{
 			"packages": []any{
 				map[string]any{
@@ -18,7 +18,7 @@ func TestValidateCLISchemaAcceptsValidEnvelope(t *testing.T) {
 			},
 		},
 	}
-	if err := ValidateCLISchema("list-result.schema.json", env); err != nil {
+	if err := ValidateCLISchema("ls-remote-result.schema.json", env); err != nil {
 		t.Fatalf("ValidateCLISchema: %v", err)
 	}
 }
@@ -27,7 +27,7 @@ func TestValidateCLISchemaRejectsAdditionalProperties(t *testing.T) {
 	env := CLIEnvelope{
 		SchemaVersion: "1",
 		OK:            true,
-		Command:       "status",
+		Command:       "ls",
 		Data: map[string]any{
 			"packages": map[string]any{
 				"example/family": map[string]any{
@@ -38,15 +38,15 @@ func TestValidateCLISchemaRejectsAdditionalProperties(t *testing.T) {
 			},
 		},
 	}
-	if err := ValidateCLISchema("status-result.schema.json", env); err == nil {
+	if err := ValidateCLISchema("ls-result.schema.json", env); err == nil {
 		t.Fatalf("expected schema rejection")
 	}
 }
 
 func TestSchemaFileNameForCLICommand(t *testing.T) {
 	tests := map[string]string{
-		"list":            "list-result.schema.json",
-		"status":          "status-result.schema.json",
+		"ls-remote":       "ls-remote-result.schema.json",
+		"ls":              "ls-result.schema.json",
 		"verify":          "verify-result.schema.json",
 		"repair":          "repair-result.schema.json",
 		"package init":    "package-init-result.schema.json",

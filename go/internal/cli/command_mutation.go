@@ -59,7 +59,7 @@ func (a *App) runInstall(ctx context.Context, args []string) int {
 	} else if dryRun && changed {
 		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID, VersionKey: detail.VersionKey})
 	}
-	return a.writeMutationResult("install", changed, planned, map[string]any{"package_id": packageID, "version_key": detail.VersionKey})
+	return a.writeInstallResult(packageID, detail.VersionKey, activate, activationDir, changed, dryRun, planned)
 }
 
 func (a *App) runActivate(_ context.Context, args []string) int {
@@ -109,7 +109,7 @@ func (a *App) runActivate(_ context.Context, args []string) int {
 	} else {
 		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID, VersionKey: versionKey})
 	}
-	return a.writeMutationResult("activate", true, planned, map[string]any{"package_id": packageID, "version_key": versionKey})
+	return a.writeActivateResult(packageID, versionKey, activationDir, dryRun, planned)
 }
 
 func (a *App) runDeactivate(_ context.Context, args []string) int {
@@ -141,7 +141,7 @@ func (a *App) runDeactivate(_ context.Context, args []string) int {
 	} else {
 		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
 	}
-	return a.writeMutationResult("deactivate", len(planned) > 1, planned, map[string]any{"package_id": packageID})
+	return a.writeDeactivateResult(packageID, len(planned) > 1, dryRun, planned)
 }
 
 func (a *App) runRepair(_ context.Context, args []string) int {
@@ -290,7 +290,7 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 		return a.writeJSON(env)
 	}
 	if len(results) == 0 {
-		fmt.Fprintln(a.Stdout, "no installed packages")
+		printNoInstalledPackages(a.Stdout)
 		return 0
 	}
 	if !changed {
@@ -298,12 +298,16 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 		for _, result := range results {
 			fmt.Fprintf(a.Stdout, "  %s: no changes\n", result.PackageID)
 		}
+		fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
+		fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
 		return 0
 	}
 	fmt.Fprintln(a.Stdout, "Repair results:")
 	for _, item := range repaired {
 		fmt.Fprintf(a.Stdout, "  %s: repaired\n", item)
 	}
+	fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
+	fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
 	if dryRun && len(planned) > 0 {
 		printPlannedActions(a.Stdout, planned)
 	}
@@ -399,7 +403,7 @@ func (a *App) runUninstall(_ context.Context, args []string) int {
 	} else if dryRun && changed {
 		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
 	}
-	return a.writeMutationResult("uninstall", changed, planned, map[string]any{"package_id": packageID})
+	return a.writeUninstallResult(packageID, targetVersions, changed, dryRun, planned)
 }
 
 func (a *App) runUpdate(ctx context.Context, args []string) int {
@@ -430,7 +434,11 @@ func (a *App) runUpdate(ctx context.Context, args []string) int {
 		if target != "" {
 			return a.fail("update", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
 		}
-		return a.writeMutationResult("update", false, nil, map[string]any{})
+		if !a.JSON {
+			printNoInstalledPackages(a.Stdout)
+			return 0
+		}
+		return a.writeUpdateResult(target, false, activate, dryRun, activationDir, nil)
 	}
 	root, err := a.Client.GetRootIndex(ctx)
 	if err != nil {
@@ -480,5 +488,5 @@ func (a *App) runUpdate(ctx context.Context, args []string) int {
 	} else if dryRun && changed {
 		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: target})
 	}
-	return a.writeMutationResult("update", changed, planned, map[string]any{})
+	return a.writeUpdateResult(target, changed, activate, dryRun, activationDir, planned)
 }

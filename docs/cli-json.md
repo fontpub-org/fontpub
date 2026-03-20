@@ -45,13 +45,13 @@ It applies whenever a command is invoked with `--json`.
 
 ## Command result shapes
 
-### `fontpub list --json`
+### `fontpub ls-remote --json`
 
 ```json
 {
   "schema_version": "1",
   "ok": true,
-  "command": "list",
+  "command": "ls-remote",
   "data": {
     "packages": [
       {
@@ -69,7 +69,7 @@ It applies whenever a command is invoked with `--json`.
 
 `data` MUST be the fetched package detail document defined in `indexes.md`.
 
-### `fontpub status --json`
+### `fontpub ls --json`
 
 `data` MUST contain:
 - `packages`
@@ -87,7 +87,7 @@ Each package status object MUST contain:
 {
   "schema_version": "1",
   "ok": true,
-  "command": "status",
+  "command": "ls",
   "data": {
     "packages": {
       "owner/repo": {

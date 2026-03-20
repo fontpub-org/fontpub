@@ -17,6 +17,8 @@ The CLI MUST support help output via `--help`.
 At minimum, the following forms MUST be supported:
 - `fontpub --help`
 - `fontpub <command> --help`
+- `fontpub ls --help`
+- `fontpub ls-remote --help`
 - `fontpub package --help`
 - `fontpub package <subcommand> --help`
 - `fontpub workflow --help`
@@ -30,6 +32,9 @@ Rules:
 - `--help` MUST take precedence over normal command execution.
 - `--help` output is not part of the CLI JSON contract and MUST NOT require `--json`.
 - Implementations MAY support `help` as an alias, but `--help` is the normative interface in v1.
+- Help output SHOULD include short command descriptions.
+- Help output SHOULD include representative examples for command groups and subcommands.
+- Top-level help SHOULD mention the main environment variables that affect CLI behavior.
 
 ### Human-oriented behavior
 
@@ -62,11 +67,19 @@ The CLI has two top-level command groups:
 
 ## End-user commands
 
-### `fontpub list`
+### `fontpub ls-remote`
 
 - Fetch `/v1/index.json` using `ETag`
 - Print available packages and latest versions
 - MUST support `--json`
+- In human-readable mode, `ls-remote` SHOULD emphasize package ID, latest version, and published date in a scannable layout
+
+### `fontpub ls [<owner>/<repo>] [--activation-dir <path>]`
+
+- Show installed packages, installed versions, active version, and activation state
+- If a package is specified, limit output to that package
+- MUST support `--json`
+- In human-readable mode, `ls` SHOULD identify the effective activation directory used for activation-state evaluation
 
 ### `fontpub show <owner>/<repo> [--version <v>]`
 
@@ -75,6 +88,8 @@ The CLI has two top-level command groups:
   - `/v1/packages/<owner>/<repo>/versions/<version_key>.json` if `--version <v>` is provided
 - Show package metadata and assets
 - MUST support `--json`
+- In human-readable mode, `show` SHOULD summarize package metadata before listing assets
+- In human-readable mode, `show` SHOULD suggest an `install` command for the displayed package version
 
 ### `fontpub install <owner>/<repo> [--version <v>] [--activate] [--activation-dir <path>]`
 
@@ -129,12 +144,6 @@ The CLI has two top-level command groups:
 - MUST support `--yes`
 - MUST support `--json`
 
-### `fontpub status [<owner>/<repo>] [--activation-dir <path>]`
-
-- Show installed packages, installed versions, active version, and activation state
-- If a package is specified, limit output to that package
-- MUST support `--json`
-
 ### `fontpub verify [<owner>/<repo>] [--activation-dir <path>]`
 
 - Verify local installation state against the lockfile
@@ -163,6 +172,8 @@ The CLI has two top-level command groups:
 - MUST support `--dry-run`
 - MUST support `--yes`
 - MUST support `--json`
+
+- Help output SHOULD use the canonical names `ls-remote` and `ls`
 
 ## Publisher commands
 
@@ -199,6 +210,7 @@ The CLI has two top-level command groups:
 - Verify that all declared files exist
 - Verify path, version, license, and file-entry constraints
 - MUST support `--json`
+- In human-readable mode, `validate` SHOULD summarize the manifest path, root path, checked file count, and version
 
 ### `fontpub package preview [PATH] [--package-id <owner>/<repo>]`
 
@@ -210,12 +222,14 @@ The CLI has two top-level command groups:
 - MUST NOT publish anything
 - preview output MUST NOT be treated as byte-identical to a published versioned package detail document
 - MUST support `--json`
+- In human-readable mode, `preview` SHOULD summarize package identity, version, asset count, and root path before listing assets
 
 ### `fontpub package inspect <font-file>`
 
 - Inspect a font file and print metadata useful for manifest generation
 - MAY include family name, style, weight, and format inference
 - MUST support `--json`
+- In human-readable mode, `inspect` SHOULD suggest `package init` or manifest review as the next step
 
 ### `fontpub package check [--tag <tag>]`
 
@@ -225,6 +239,7 @@ The CLI has two top-level command groups:
   - file existence
   - tag/version consistency if `--tag <tag>` was provided
 - MUST support `--json`
+- In human-readable mode, `check` SHOULD summarize the root path, manifest path, checked file count, version, and tag when provided
 
 ### `fontpub workflow init`
 
@@ -238,6 +253,23 @@ The CLI has two top-level command groups:
 ### Human-readable output
 
 Human-readable output should be concise and directly actionable.
+
+For mutating commands in human-readable mode:
+- success output SHOULD identify the affected package ID and version when applicable
+- success output SHOULD summarize the material local changes that occurred, such as assets written, symlinks created or removed, and files written
+- `--dry-run` output SHOULD clearly indicate that it is a plan and SHOULD include the planned actions
+- when no local change is required, the output SHOULD say why, not only that nothing changed
+- `repair` output SHOULD summarize what was reconciled, including symlink creation or removal counts when relevant
+
+For failures in human-readable mode:
+- error output SHOULD include the relevant structured details when available, such as `path`, `package_id`, `version_key`, or `flag`
+- error output SHOULD include a concise next step when the CLI can determine one
+- unknown commands and missing subcommands SHOULD direct the user to the relevant `--help` output
+- `verify` and `repair` failure output SHOULD include finding-specific details such as `local_path`, `symlink_path`, and `reason` when available
+
+For empty-state success output in human-readable mode:
+- commands that find no published or installed packages SHOULD say so explicitly
+- when the CLI can suggest a clear next action, empty-state output SHOULD include it
 
 ### JSON output
 
@@ -258,7 +290,7 @@ When `--json` is set:
 
 ## Activation directory
 
-- Commands that read or modify activation state (`activate`, `deactivate`, `status`, `verify`, `repair`, `uninstall`) MUST support `--activation-dir <path>`.
+- Commands that read or modify activation state (`activate`, `deactivate`, `ls`, `verify`, `repair`, `uninstall`) MUST support `--activation-dir <path>`.
 - Commands that can immediately activate as part of another operation (`install --activate`, `update --activate`) MUST also support `--activation-dir <path>`.
 - When `--activation-dir` is provided, activation behavior is defined entirely against that directory.
 - Implementations MAY provide a platform default activation directory when `--activation-dir` is omitted.
@@ -276,7 +308,7 @@ Symlink naming:
 Activation safety rules:
 - The CLI MUST use the validated asset basename exactly as published in the package detail.
 - The CLI MUST NOT interpret asset basenames as path components, option flags, or shell fragments.
-- `status`, `verify`, and `repair` MUST evaluate activation state against the effective activation directory selected by `--activation-dir` or the implementation default.
+- `ls`, `verify`, and `repair` MUST evaluate activation state against the effective activation directory selected by `--activation-dir` or the implementation default.
 
 If a symlink name would collide:
 - The CLI MUST make the name unique by appending `--<shortsha>` where `shortsha` is the first 8 chars of the asset SHA-256.

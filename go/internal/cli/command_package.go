@@ -25,7 +25,7 @@ func (a *App) runPackage(ctx context.Context, args []string) int {
 	case "check":
 		return a.runPackageCheck(ctx, args[1:])
 	default:
-		return a.fail("package "+args[0], &CLIError{Code: "INTERNAL_ERROR", Message: "package subcommand is not implemented", Details: map[string]any{"command": args[0]}})
+		return a.fail("package", &CLIError{Code: "INPUT_REQUIRED", Message: "unknown package subcommand", Details: map[string]any{"subcommand": args[0]}})
 	}
 }
 
@@ -54,6 +54,9 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 
 	if len(unresolved) > 0 {
 		if a.JSON {
+			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "required manifest fields could not be inferred", Details: map[string]any{"unresolved_fields": unresolved}})
+		}
+		if !a.isInteractive() {
 			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "required manifest fields could not be inferred", Details: map[string]any{"unresolved_fields": unresolved}})
 		}
 		if err := a.promptForManifestFields(&manifest, &inferences, unresolved); err != nil {
@@ -85,6 +88,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 
 	if writeFile {
 		target := filepath.Join(root, "fontpub.json")
+		planned := []PlannedAction{{Type: "write_manifest", Path: target}}
 		if _, err := os.Stat(target); err == nil && !yes {
 			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "refusing to overwrite existing fontpub.json without --yes", Details: map[string]any{"path": target}})
 		}
@@ -98,10 +102,15 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 			}
 		}
 		if dryRun {
-			fmt.Fprintf(a.Stdout, "manifest ready (dry-run): %s\n", target)
+			fmt.Fprintln(a.Stdout, "Manifest write plan")
+			fmt.Fprintf(a.Stdout, "  path: %s\n", target)
+			fmt.Fprintf(a.Stdout, "  files discovered: %d\n", len(manifest.Files))
+			printPlannedActions(a.Stdout, planned)
 			return 0
 		}
-		fmt.Fprintf(a.Stdout, "manifest ready: %s\n", target)
+		fmt.Fprintln(a.Stdout, "Wrote fontpub.json")
+		fmt.Fprintf(a.Stdout, "  path: %s\n", target)
+		fmt.Fprintf(a.Stdout, "  files discovered: %d\n", len(manifest.Files))
 		return 0
 	}
 
@@ -140,7 +149,7 @@ func (a *App) runPackageValidate(_ context.Context, args []string) int {
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package validate", Data: data})
 	}
-	fmt.Fprintf(a.Stdout, "valid manifest: %s\n", filepath.Join(root, "fontpub.json"))
+	printPackageValidateSummary(a.Stdout, root, manifest)
 	return 0
 }
 
@@ -165,11 +174,7 @@ func (a *App) runPackagePreview(_ context.Context, args []string) int {
 		}
 		return a.writeJSON(env)
 	}
-	body, err := protocol.MarshalCanonical(candidate)
-	if err != nil {
-		return a.fail("package preview", &CLIError{Code: "INTERNAL_ERROR", Message: "could not serialize preview", Details: map[string]any{"reason": err.Error()}})
-	}
-	_, _ = a.Stdout.Write(append(body, '\n'))
+	printPackagePreviewSummary(a.Stdout, candidate)
 	return 0
 }
 
@@ -233,6 +238,6 @@ func (a *App) runPackageCheck(_ context.Context, args []string) int {
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package check", Data: data})
 	}
-	fmt.Fprintln(a.Stdout, "package is ready for publication")
+	printPackageCheckSummary(a.Stdout, root, manifest, tag)
 	return 0
 }

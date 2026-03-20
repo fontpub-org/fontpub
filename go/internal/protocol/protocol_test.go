@@ -202,8 +202,8 @@ func TestCLIJSONFixtures(t *testing.T) {
 			t.Fatalf("%s schema validation: %v", name, err)
 		}
 	}
-	if err := ValidateCLISchema("envelope.schema.json", fixture["list"].Valid); err != nil {
-		t.Fatalf("list envelope: %v", err)
+	if err := ValidateCLISchema("envelope.schema.json", fixture["ls_remote"].Valid); err != nil {
+		t.Fatalf("ls_remote envelope: %v", err)
 	}
 	if err := ValidateCLISchema("envelope.schema.json", fixture["verify_failure"].Valid); err != nil {
 		t.Fatalf("verify_failure envelope: %v", err)
@@ -214,11 +214,11 @@ func TestCLIJSONFixtures(t *testing.T) {
 	if err := ValidateCLISchema("envelope.schema.json", fixture["repair_failure"].Valid); err != nil {
 		t.Fatalf("repair_failure envelope: %v", err)
 	}
-	if err := ValidateCLIEnvelope(fixture["list"].Valid); err != nil {
-		t.Fatalf("list envelope validator: %v", err)
+	if err := ValidateCLIEnvelope(fixture["ls_remote"].Valid); err != nil {
+		t.Fatalf("ls_remote envelope validator: %v", err)
 	}
-	if err := ValidateStatusResult(fixture["status"].Valid); err != nil {
-		t.Fatalf("status: %v", err)
+	if err := ValidateStatusResult(fixture["ls"].Valid); err != nil {
+		t.Fatalf("ls: %v", err)
 	}
 	if err := ValidateVerifyResult(fixture["verify_failure"].Valid); err != nil {
 		t.Fatalf("verify_failure: %v", err)

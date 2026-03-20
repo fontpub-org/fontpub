@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
@@ -69,7 +70,7 @@ func (a *App) fail(command string, err *CLIError) int {
 		})
 		return 1
 	}
-	fmt.Fprintf(a.Stderr, "%s: %s\n", err.Code, err.Message)
+	printHumanError(a.Stderr, command, err)
 	return 1
 }
 
@@ -89,21 +90,30 @@ func printPackageDetailSummary(w io.Writer, detail protocol.VersionedPackageDeta
 	fmt.Fprintf(w, "Author: %s\n", detail.Author)
 	fmt.Fprintf(w, "License: %s\n", detail.License)
 	fmt.Fprintf(w, "Version: %s (key %s)\n", detail.Version, detail.VersionKey)
-	fmt.Fprintf(w, "Published at: %s\n", detail.PublishedAt)
-	fmt.Fprintf(w, "GitHub: %s/%s @ %s\n", detail.GitHub.Owner, detail.GitHub.Repo, detail.GitHub.SHA)
-	fmt.Fprintf(w, "Manifest URL: %s\n", detail.ManifestURL)
+	fmt.Fprintf(w, "Published: %s\n", detail.PublishedAt)
+	fmt.Fprintf(w, "GitHub: %s/%s @ %s\n", detail.GitHub.Owner, detail.GitHub.Repo, shortSHA(detail.GitHub.SHA))
+	fmt.Fprintf(w, "Manifest: %s\n", detail.ManifestURL)
 	fmt.Fprintln(w, "Assets:")
 	for _, asset := range detail.Assets {
 		fmt.Fprintf(
 			w,
-			"  - %s [%s] style=%s weight=%d size=%d\n",
-			asset.Path,
+			"  - %s [%s] path=%s style=%s weight=%d size=%d\n",
+			filepath.Base(filepath.FromSlash(asset.Path)),
 			asset.Format,
+			asset.Path,
 			asset.Style,
 			asset.Weight,
 			asset.SizeBytes,
 		)
 	}
+	printNextHints(w, fmt.Sprintf("run: fontpub install %s --version %s", detail.PackageID, detail.Version))
+}
+
+func shortSHA(value string) string {
+	if len(value) > 12 {
+		return value[:12]
+	}
+	return value
 }
 
 func printPackageCheckResults(w io.Writer, header string, results []PackageCheckResult) {
@@ -122,7 +132,45 @@ func printPackageCheckResults(w io.Writer, header string, results []PackageCheck
 				fmt.Fprintf(w, " (%s)", path)
 			}
 			fmt.Fprintln(w)
+			printFindingDetailLines(w, finding.Details)
 		}
+	}
+}
+
+func printNextHints(w io.Writer, hints ...string) {
+	if len(hints) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "Next:")
+	for _, hint := range hints {
+		fmt.Fprintf(w, "  %s\n", hint)
+	}
+}
+
+func printNoPublishedPackages(w io.Writer) {
+	fmt.Fprintln(w, "no published packages")
+	printNextHints(w, "check FONTPUB_BASE_URL or publish package metadata to the service")
+}
+
+func printNoInstalledPackages(w io.Writer) {
+	fmt.Fprintln(w, "no installed packages")
+	printNextHints(w, "run: fontpub ls-remote", "run: fontpub install <owner>/<repo>")
+}
+
+func printFindingDetailLines(w io.Writer, details map[string]any) {
+	if len(details) == 0 {
+		return
+	}
+	for _, key := range []string{"local_path", "symlink_path", "reason", "status", "url"} {
+		value, ok := details[key]
+		if !ok {
+			continue
+		}
+		text := formatHumanDetailValue(value)
+		if text == "" {
+			continue
+		}
+		fmt.Fprintf(w, "      %s: %s\n", key, text)
 	}
 }
 

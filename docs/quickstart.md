@@ -144,7 +144,8 @@ The CLI also supports user-facing commands such as:
 ```bash
 cd go
 go run ./cmd/fontpub --help
-go run ./cmd/fontpub list --json
+go run ./cmd/fontpub ls-remote --json
+go run ./cmd/fontpub ls --json
 go run ./cmd/fontpub show owner/repo --json
 ```
 
@@ -295,7 +296,7 @@ If you want to run the whole local-only flow in one command, use the helper scri
 tools/scripts/local-dev-e2e.sh --package-id owner/repo --repo /path/to/local/repo --tag 1.002 --keep
 ```
 
-The script generates a temporary dev JWT, runs the local indexer, serves the generated artifacts, and exercises `fontpub list/show/install/status/verify` against them.
+The script generates a temporary dev JWT, runs the local indexer, serves the generated artifacts, and exercises `fontpub ls-remote/show/install/ls/verify` against them.
 
 ## Run Tests
 

@@ -6,17 +6,18 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
-func (a *App) runList(ctx context.Context, args []string) int {
+func (a *App) runLSRemote(ctx context.Context, args []string) int {
 	if len(args) != 0 {
-		return a.fail("list", &CLIError{Code: "INPUT_REQUIRED", Message: "list does not accept positional arguments", Details: map[string]any{}})
+		return a.fail("ls-remote", &CLIError{Code: "INPUT_REQUIRED", Message: "ls-remote does not accept positional arguments", Details: map[string]any{}})
 	}
 	root, err := a.Client.GetRootIndex(ctx)
 	if err != nil {
-		return a.fail("list", asCLIError(err))
+		return a.fail("ls-remote", asCLIError(err))
 	}
 	packageIDs := make([]string, 0, len(root.Packages))
 	for packageID := range root.Packages {
@@ -35,23 +36,42 @@ func (a *App) runList(ctx context.Context, args []string) int {
 	}
 	data := map[string]any{"packages": packages}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "list", Data: data})
+		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "ls-remote", Data: data})
 	}
 	if len(packages) == 0 {
-		fmt.Fprintln(a.Stdout, "no published packages")
+		printNoPublishedPackages(a.Stdout)
 		return 0
 	}
 	fmt.Fprintln(a.Stdout, "Available packages:")
+	packageWidth := len("package")
+	versionWidth := len("latest")
+	for _, pkg := range packages {
+		if n := len(stringValue(pkg["package_id"])); n > packageWidth {
+			packageWidth = n
+		}
+		if n := len(stringValue(pkg["latest_version"])); n > versionWidth {
+			versionWidth = n
+		}
+	}
 	for _, pkg := range packages {
 		fmt.Fprintf(
 			a.Stdout,
-			"  - %s (latest %s, published %s)\n",
+			"  - %-*s  latest %-*s  published %s\n",
+			packageWidth,
 			pkg["package_id"],
+			versionWidth,
 			pkg["latest_version"],
-			pkg["latest_published_at"],
+			humanDate(stringValue(pkg["latest_published_at"])),
 		)
 	}
 	return 0
+}
+
+func humanDate(value string) string {
+	if ts, err := time.Parse(time.RFC3339, value); err == nil {
+		return ts.Format("2006-01-02")
+	}
+	return value
 }
 
 func (a *App) runShow(ctx context.Context, args []string) int {
@@ -86,14 +106,17 @@ func (a *App) runShow(ctx context.Context, args []string) int {
 	return 0
 }
 
-func (a *App) runStatus(_ context.Context, args []string) int {
-	_, rest, errObj := extractStringFlag(args, "--activation-dir")
+func (a *App) runLS(_ context.Context, args []string) int {
+	activationDir, rest, errObj := extractStringFlag(args, "--activation-dir")
 	if errObj != nil {
-		return a.fail("status", errObj)
+		return a.fail("ls", errObj)
+	}
+	if activationDir == "" {
+		activationDir = a.Config.DefaultActivationDir
 	}
 	var target string
 	if len(rest) > 1 {
-		return a.fail("status", &CLIError{Code: "INPUT_REQUIRED", Message: "status accepts at most one package id", Details: map[string]any{}})
+		return a.fail("ls", &CLIError{Code: "INPUT_REQUIRED", Message: "ls accepts at most one package id", Details: map[string]any{}})
 	}
 	if len(rest) == 1 {
 		target = normalizePackageID(rest[0])
@@ -101,7 +124,7 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 
 	lock, ok, err := LockfileStore{Path: a.Config.LockfilePath()}.Load()
 	if err != nil {
-		return a.fail("status", asCLIError(err))
+		return a.fail("ls", asCLIError(err))
 	}
 	packagesData := map[string]any{}
 	if ok {
@@ -131,20 +154,20 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 	}
 	if target != "" {
 		if _, exists := packagesData[target]; !exists {
-			return a.fail("status", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+			return a.fail("ls", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
 		}
 	}
 
 	data := map[string]any{"packages": packagesData}
 	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "status", Data: data}
+		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "ls", Data: data}
 		if err := protocol.ValidateStatusResult(env); err != nil {
-			return a.fail("status", &CLIError{Code: "INTERNAL_ERROR", Message: "status output validation failed", Details: map[string]any{"reason": err.Error()}})
+			return a.fail("ls", &CLIError{Code: "INTERNAL_ERROR", Message: "ls output validation failed", Details: map[string]any{"reason": err.Error()}})
 		}
 		return a.writeJSON(env)
 	}
 	if len(packagesData) == 0 {
-		fmt.Fprintln(a.Stdout, "no installed packages")
+		printNoInstalledPackages(a.Stdout)
 		return 0
 	}
 	packageIDs := make([]string, 0, len(packagesData))
@@ -166,8 +189,42 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 		fmt.Fprintf(a.Stdout, "%s\n", packageID)
 		fmt.Fprintf(a.Stdout, "  installed versions: %s\n", strings.Join(versionTexts, ", "))
 		fmt.Fprintf(a.Stdout, "  active version: %s\n", active)
+		pkg := lock.Packages[packageID]
+		dirText, statusText := humanStatusActivationSummary(pkg, activationDir)
+		fmt.Fprintf(a.Stdout, "  activation dir: %s\n", dirText)
+		fmt.Fprintf(a.Stdout, "  activation status: %s\n", statusText)
 	}
 	return 0
+}
+
+func humanStatusActivationSummary(pkg protocol.LockedPackage, activationDir string) (string, string) {
+	if activationDir == "" {
+		if pkg.ActiveVersionKey == nil {
+			return "not set", "inactive"
+		}
+		return "not set", "not checked (pass --activation-dir or set FONTPUB_ACTIVATION_DIR)"
+	}
+	if pkg.ActiveVersionKey == nil {
+		return activationDir, "inactive"
+	}
+	version, ok := pkg.InstalledVersions[*pkg.ActiveVersionKey]
+	if !ok {
+		return activationDir, "broken (active version missing from lockfile)"
+	}
+	total := len(version.Assets)
+	if total == 0 {
+		return activationDir, "inactive"
+	}
+	linked := 0
+	for _, asset := range version.Assets {
+		if activationLinkMatches(asset, activationDir) {
+			linked++
+		}
+	}
+	if linked == total {
+		return activationDir, fmt.Sprintf("active (%d/%d assets linked)", linked, total)
+	}
+	return activationDir, fmt.Sprintf("broken (%d/%d assets linked)", linked, total)
 }
 
 func (a *App) runVerify(_ context.Context, args []string) int {
@@ -232,7 +289,7 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 		return a.writeJSON(env)
 	}
 	if len(results) == 0 {
-		fmt.Fprintln(a.Stdout, "no installed packages")
+		printNoInstalledPackages(a.Stdout)
 		return 0
 	}
 	printPackageCheckResults(a.Stdout, "Verification results:", results)

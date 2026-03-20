@@ -143,6 +143,24 @@ func verifyLockedAsset(asset protocol.LockedAsset) *Finding {
 	return nil
 }
 
+func activationLinkMatches(asset protocol.LockedAsset, activationDir string) bool {
+	if !asset.Active || activationDir == "" || asset.SymlinkPath == nil || *asset.SymlinkPath == "" {
+		return false
+	}
+	if filepath.Clean(filepath.Dir(*asset.SymlinkPath)) != filepath.Clean(activationDir) {
+		return false
+	}
+	target, err := os.Readlink(*asset.SymlinkPath)
+	if err != nil {
+		return false
+	}
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(*asset.SymlinkPath), resolved)
+	}
+	return filepath.Clean(resolved) == filepath.Clean(asset.LocalPath)
+}
+
 func chooseInstalledVersion(pkg protocol.LockedPackage, requested string) (string, *CLIError) {
 	if requested != "" {
 		versionKey, err := protocol.NormalizeVersionKey(requested)

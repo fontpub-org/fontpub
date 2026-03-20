@@ -17,7 +17,7 @@ func (a *App) runWorkflow(ctx context.Context, args []string) int {
 	case "init":
 		return a.runWorkflowInit(ctx, args[1:])
 	default:
-		return a.fail("workflow "+args[0], &CLIError{Code: "INTERNAL_ERROR", Message: "workflow subcommand is not implemented", Details: map[string]any{"command": args[0]}})
+		return a.fail("workflow", &CLIError{Code: "INPUT_REQUIRED", Message: "unknown workflow subcommand", Details: map[string]any{"subcommand": args[0]}})
 	}
 }
 
@@ -36,7 +36,7 @@ func (a *App) runWorkflowInit(_ context.Context, args []string) int {
 	}
 	target := filepath.Join(root, ".github", "workflows", "fontpub.yml")
 	body := []byte(generatedWorkflowYAML(a.Config.BaseURL))
-	planned := []PlannedAction{{Type: "write_workflow", PackageID: ""}}
+	planned := []PlannedAction{{Type: "write_workflow", PackageID: "", Path: target}}
 	if a.JSON {
 		data := map[string]any{"changed": true}
 		if dryRun {
@@ -55,6 +55,13 @@ func (a *App) runWorkflowInit(_ context.Context, args []string) int {
 			return a.fail("workflow init", &CLIError{Code: "INTERNAL_ERROR", Message: "could not write workflow", Details: map[string]any{"path": target, "reason": err.Error()}})
 		}
 	}
-	fmt.Fprintf(a.Stdout, "workflow ready: %s\n", target)
+	if dryRun {
+		fmt.Fprintln(a.Stdout, "Workflow write plan")
+		fmt.Fprintf(a.Stdout, "  path: %s\n", target)
+		printPlannedActions(a.Stdout, planned)
+		return 0
+	}
+	fmt.Fprintln(a.Stdout, "Wrote workflow")
+	fmt.Fprintf(a.Stdout, "  path: %s\n", target)
 	return 0
 }
