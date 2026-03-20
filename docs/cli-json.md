@@ -16,6 +16,7 @@ It applies whenever a command is invoked with `--json`.
 - On failure, the top-level object MUST contain `error`.
 - `schema_version` MUST equal `"1"`.
 - Conforming implementations SHOULD publish JSON Schemas for the CLI envelope and command-specific result objects under `protocol/schemas/cli/`.
+- If compatibility aliases are supported, the JSON `command` field SHOULD use the canonical command name rather than the invoked alias. For example, `list` SHOULD emit `ls-remote`, and `status` SHOULD emit `ls`.
 
 ## Success shape
 
@@ -45,13 +46,13 @@ It applies whenever a command is invoked with `--json`.
 
 ## Command result shapes
 
-### `fontpub list --json`
+### `fontpub ls-remote --json`
 
 ```json
 {
   "schema_version": "1",
   "ok": true,
-  "command": "list",
+  "command": "ls-remote",
   "data": {
     "packages": [
       {
@@ -69,7 +70,7 @@ It applies whenever a command is invoked with `--json`.
 
 `data` MUST be the fetched package detail document defined in `indexes.md`.
 
-### `fontpub status --json`
+### `fontpub ls --json`
 
 `data` MUST contain:
 - `packages`
@@ -87,7 +88,7 @@ Each package status object MUST contain:
 {
   "schema_version": "1",
   "ok": true,
-  "command": "status",
+  "command": "ls",
   "data": {
     "packages": {
       "owner/repo": {

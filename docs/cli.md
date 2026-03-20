@@ -17,6 +17,8 @@ The CLI MUST support help output via `--help`.
 At minimum, the following forms MUST be supported:
 - `fontpub --help`
 - `fontpub <command> --help`
+- `fontpub ls --help`
+- `fontpub ls-remote --help`
 - `fontpub package --help`
 - `fontpub package <subcommand> --help`
 - `fontpub workflow --help`
@@ -65,12 +67,19 @@ The CLI has two top-level command groups:
 
 ## End-user commands
 
-### `fontpub list`
+### `fontpub ls-remote`
 
 - Fetch `/v1/index.json` using `ETag`
 - Print available packages and latest versions
 - MUST support `--json`
-- In human-readable mode, `list` SHOULD emphasize package ID, latest version, and published date in a scannable layout
+- In human-readable mode, `ls-remote` SHOULD emphasize package ID, latest version, and published date in a scannable layout
+
+### `fontpub ls [<owner>/<repo>] [--activation-dir <path>]`
+
+- Show installed packages, installed versions, active version, and activation state
+- If a package is specified, limit output to that package
+- MUST support `--json`
+- In human-readable mode, `ls` SHOULD identify the effective activation directory used for activation-state evaluation
 
 ### `fontpub show <owner>/<repo> [--version <v>]`
 
@@ -134,13 +143,6 @@ The CLI has two top-level command groups:
 - MUST support `--yes`
 - MUST support `--json`
 
-### `fontpub status [<owner>/<repo>] [--activation-dir <path>]`
-
-- Show installed packages, installed versions, active version, and activation state
-- If a package is specified, limit output to that package
-- MUST support `--json`
-- In human-readable mode, `status` SHOULD identify the effective activation directory used for activation-state evaluation
-
 ### `fontpub verify [<owner>/<repo>] [--activation-dir <path>]`
 
 - Verify local installation state against the lockfile
@@ -169,6 +171,13 @@ The CLI has two top-level command groups:
 - MUST support `--dry-run`
 - MUST support `--yes`
 - MUST support `--json`
+
+### Compatibility aliases
+
+- Implementations MAY support `fontpub list` as a compatibility alias for `fontpub ls-remote`
+- Implementations MAY support `fontpub status` as a compatibility alias for `fontpub ls`
+- Help output SHOULD prefer the canonical names `ls-remote` and `ls`
+- If compatibility aliases are supported, new documentation and examples SHOULD prefer `ls-remote` and `ls`
 
 ## Publisher commands
 
