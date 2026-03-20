@@ -239,6 +239,12 @@ The CLI has two top-level command groups:
 
 Human-readable output should be concise and directly actionable.
 
+For mutating commands in human-readable mode:
+- success output SHOULD identify the affected package ID and version when applicable
+- success output SHOULD summarize the material local changes that occurred, such as assets written, symlinks created or removed, and files written
+- `--dry-run` output SHOULD clearly indicate that it is a plan and SHOULD include the planned actions
+- when no local change is required, the output SHOULD say why, not only that nothing changed
+
 ### JSON output
 
 When `--json` is set:

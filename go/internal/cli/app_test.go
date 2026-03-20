@@ -422,6 +422,67 @@ func TestInstallActivateVerifyRepairAndUninstall(t *testing.T) {
 	}
 }
 
+func TestInstallHumanReadableSummaries(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	assetBytes := []byte("regular-font-bytes")
+	sum := sha256.Sum256(assetBytes)
+	assetSHA := fmtHex(sum[:])
+	client := fakeClient(map[string]responseSpec{
+		"/v1/packages/example/family.json": {
+			body: protocol.VersionedPackageDetail{
+				SchemaVersion: "1",
+				PackageID:     "example/family",
+				DisplayName:   "Example Sans",
+				Author:        "Example Studio",
+				License:       "OFL-1.1",
+				Version:       "1.2.3",
+				VersionKey:    "1.2.3",
+				PublishedAt:   "2026-01-02T00:00:00Z",
+				GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "0123456789abcdef0123456789abcdef01234567"},
+				ManifestURL:   "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+				Assets: []protocol.VersionedAsset{
+					{Path: "dist/ExampleSans-Regular.otf", URL: "https://assets.example/regular.otf", SHA256: assetSHA, Format: "otf", Style: "normal", Weight: 400, SizeBytes: int64(len(assetBytes))},
+				},
+			},
+		},
+		"https://assets.example/regular.otf": {raw: assetBytes},
+	})
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: stateDir},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Now:    func() time.Time { return time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC) },
+	}
+
+	if code := app.Run(context.Background(), []string{"install", "example/family", "--activate", "--activation-dir", activationDir}); code != 0 {
+		t.Fatalf("install code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Installed and activated example/family@1.2.3\n",
+		"  assets: 1\n",
+		"  install root: " + filepath.Join(stateDir, "packages", "example", "family", "1.2.3") + "\n",
+		"  activation dir: " + activationDir + "\n",
+		"  symlinks created: 1\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("install output missing %q\n%s", want, output)
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"install", "example/family"}); code != 0 {
+		t.Fatalf("second install code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "example/family@1.2.3 is already installed\n") {
+		t.Fatalf("unexpected no-change output:\n%s", got)
+	}
+}
+
 func TestUpdateInstallsLatestVersion(t *testing.T) {
 	stateDir := t.TempDir()
 	activationDir := t.TempDir()
@@ -500,6 +561,96 @@ func TestUpdateInstallsLatestVersion(t *testing.T) {
 	newLocal := filepath.Join(stateDir, "packages", "example", "family", "1.3", "dist", "ExampleSans-Regular.otf")
 	if _, err := os.Stat(newLocal); err != nil {
 		t.Fatalf("os.Stat(newLocal): %v", err)
+	}
+}
+
+func TestUpdateHumanReadableDryRun(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	oldSHA := strings.Repeat("a", 64)
+	oldLocal := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(oldLocal), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(oldLocal, []byte("old-font"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", SHA256: oldSHA, LocalPath: oldLocal},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	newBytes := []byte("new-font")
+	sum := sha256.Sum256(newBytes)
+	newSHA := fmtHex(sum[:])
+	client := fakeClient(map[string]responseSpec{
+		"/v1/index.json": {
+			body: protocol.RootIndex{
+				SchemaVersion: "1",
+				GeneratedAt:   "2026-01-03T00:00:00Z",
+				Packages: map[string]protocol.RootIndexPackage{
+					"example/family": {LatestVersion: "1.3.0", LatestVersionKey: "1.3", LatestPublishedAt: "2026-01-03T00:00:00Z"},
+				},
+			},
+		},
+		"/v1/packages/example/family/versions/1.3.json": {
+			body: protocol.VersionedPackageDetail{
+				SchemaVersion: "1",
+				PackageID:     "example/family",
+				DisplayName:   "Example Sans",
+				Author:        "Example Studio",
+				License:       "OFL-1.1",
+				Version:       "1.3.0",
+				VersionKey:    "1.3",
+				PublishedAt:   "2026-01-03T00:00:00Z",
+				GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "89abcdef0123456789abcdef0123456789abcdef"},
+				ManifestURL:   "https://raw.githubusercontent.com/example/family/89abcdef0123456789abcdef0123456789abcdef/fontpub.json",
+				Assets: []protocol.VersionedAsset{
+					{Path: "dist/ExampleSans-Regular.otf", URL: "https://assets.example/new-regular.otf", SHA256: newSHA, Format: "otf", Style: "normal", Weight: 400, SizeBytes: int64(len(newBytes))},
+				},
+			},
+		},
+		"https://assets.example/new-regular.otf": {raw: newBytes},
+	})
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: stateDir, DefaultActivationDir: activationDir},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"update", "example/family", "--activate", "--dry-run"}); code != 0 {
+		t.Fatalf("update dry-run code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Update plan for 1 package(s)\n",
+		"Packages:\n",
+		"  - example/family@1.3\n",
+		"  assets written: 1\n",
+		"  activation dir: " + activationDir + "\n",
+		"  symlinks created: 1\n",
+		"Planned actions:\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("update output missing %q\n%s", want, output)
+		}
 	}
 }
 
@@ -1309,6 +1460,80 @@ func TestRepairHumanReadableDryRun(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("repair output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestDeactivateAndUninstallHumanReadable(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	body := []byte("font-bytes")
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	sum := sha256.Sum256(body)
+	symlinkPath := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(localPath, symlinkPath); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: func() *string { v := "1.2.3"; return &v }(),
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{
+								Path:        "dist/ExampleSans-Regular.otf",
+								SHA256:      fmtHex(sum[:]),
+								LocalPath:   localPath,
+								Active:      true,
+								SymlinkPath: &symlinkPath,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"deactivate", "example/family"}); code != 0 {
+		t.Fatalf("deactivate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if output := stdout.String(); !strings.Contains(output, "Deactivated example/family\n") || !strings.Contains(output, "  symlinks removed: 1\n") {
+		t.Fatalf("unexpected deactivate output:\n%s", output)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"uninstall", "example/family", "--all", "--yes"}); code != 0 {
+		t.Fatalf("uninstall code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"Uninstalled example/family@1.2.3\n",
+		"  versions: 1.2.3\n",
+		"  assets removed: 1\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("uninstall output missing %q\n%s", want, output)
 		}
 	}
 }
