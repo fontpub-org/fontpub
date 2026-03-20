@@ -137,6 +137,7 @@ The CLI has two top-level command groups:
 - Show installed packages, installed versions, active version, and activation state
 - If a package is specified, limit output to that package
 - MUST support `--json`
+- In human-readable mode, `status` SHOULD identify the effective activation directory used for activation-state evaluation
 
 ### `fontpub verify [<owner>/<repo>] [--activation-dir <path>]`
 

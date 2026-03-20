@@ -314,10 +314,122 @@ func TestRunStatusHumanReadable(t *testing.T) {
 		"example/family\n",
 		"  installed versions: 1.2.3\n",
 		"  active version: 1.2.3\n",
+		"  activation dir: not set\n",
+		"  activation status: not checked (pass --activation-dir or set FONTPUB_ACTIVATION_DIR)\n",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("status output missing %q\n%s", want, output)
 		}
+	}
+}
+
+func TestRunStatusHumanReadableWithActivationDir(t *testing.T) {
+	dir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(dir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(localPath, []byte("font-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	symlinkPath := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(localPath, symlinkPath); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: func() *string { v := "1.2.3"; return &v }(),
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", SHA256: strings.Repeat("a", 64), LocalPath: localPath, Active: true, SymlinkPath: &symlinkPath},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(dir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: dir, BaseURL: "https://fontpub.org", DefaultActivationDir: activationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"status", "example/family"}); code != 0 {
+		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"example/family\n",
+		"  activation dir: " + activationDir + "\n",
+		"  activation status: active (1/1 assets linked)\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("status output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestRunStatusHumanReadableBrokenActivation(t *testing.T) {
+	dir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(dir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(localPath, []byte("font-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	badTarget := filepath.Join(dir, "wrong.otf")
+	symlinkPath := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(badTarget, symlinkPath); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: func() *string { v := "1.2.3"; return &v }(),
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", SHA256: strings.Repeat("a", 64), LocalPath: localPath, Active: true, SymlinkPath: &symlinkPath},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(dir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: dir, BaseURL: "https://fontpub.org"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"status", "example/family", "--activation-dir", activationDir}); code != 0 {
+		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
+	}
+	if output := stdout.String(); !strings.Contains(output, "  activation status: broken (0/1 assets linked)\n") {
+		t.Fatalf("unexpected status output:\n%s", output)
 	}
 }
 

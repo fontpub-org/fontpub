@@ -87,9 +87,12 @@ func (a *App) runShow(ctx context.Context, args []string) int {
 }
 
 func (a *App) runStatus(_ context.Context, args []string) int {
-	_, rest, errObj := extractStringFlag(args, "--activation-dir")
+	activationDir, rest, errObj := extractStringFlag(args, "--activation-dir")
 	if errObj != nil {
 		return a.fail("status", errObj)
+	}
+	if activationDir == "" {
+		activationDir = a.Config.DefaultActivationDir
 	}
 	var target string
 	if len(rest) > 1 {
@@ -166,8 +169,42 @@ func (a *App) runStatus(_ context.Context, args []string) int {
 		fmt.Fprintf(a.Stdout, "%s\n", packageID)
 		fmt.Fprintf(a.Stdout, "  installed versions: %s\n", strings.Join(versionTexts, ", "))
 		fmt.Fprintf(a.Stdout, "  active version: %s\n", active)
+		pkg := lock.Packages[packageID]
+		dirText, statusText := humanStatusActivationSummary(pkg, activationDir)
+		fmt.Fprintf(a.Stdout, "  activation dir: %s\n", dirText)
+		fmt.Fprintf(a.Stdout, "  activation status: %s\n", statusText)
 	}
 	return 0
+}
+
+func humanStatusActivationSummary(pkg protocol.LockedPackage, activationDir string) (string, string) {
+	if activationDir == "" {
+		if pkg.ActiveVersionKey == nil {
+			return "not set", "inactive"
+		}
+		return "not set", "not checked (pass --activation-dir or set FONTPUB_ACTIVATION_DIR)"
+	}
+	if pkg.ActiveVersionKey == nil {
+		return activationDir, "inactive"
+	}
+	version, ok := pkg.InstalledVersions[*pkg.ActiveVersionKey]
+	if !ok {
+		return activationDir, "broken (active version missing from lockfile)"
+	}
+	total := len(version.Assets)
+	if total == 0 {
+		return activationDir, "inactive"
+	}
+	linked := 0
+	for _, asset := range version.Assets {
+		if activationLinkMatches(asset, activationDir) {
+			linked++
+		}
+	}
+	if linked == total {
+		return activationDir, fmt.Sprintf("active (%d/%d assets linked)", linked, total)
+	}
+	return activationDir, fmt.Sprintf("broken (%d/%d assets linked)", linked, total)
 }
 
 func (a *App) runVerify(_ context.Context, args []string) int {
