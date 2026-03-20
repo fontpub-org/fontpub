@@ -26,35 +26,6 @@ A font is never truly "finished"—it evolves with bug fixes, new glyphs, and re
 
 Open infrastructure matters as much as open files. Fontpub is built around public, immutable metadata that can be inspected, mirrored, and rebuilt. What gets published should remain visible. What gets installed should remain verifiable. The protocol should not disappear behind a private database or a proprietary service boundary.
 
-### 5. Tools for Humans and Machines
-
-The future of software is collaborative, and that includes collaboration with tools. Fontpub is designed for designers, developers, and software agents alike: readable by humans, scriptable by machines, and structured enough to support automation without sacrificing clarity.
-
 ---
 
 The era of static fonts is over. Join the protocol.
-
-## Try It
-
-If you want to try the current implementation locally, start with the quickstart:
-
-- [Quickstart](./docs/quickstart.md)
-
-For a publisher workflow, the shortest path is:
-
-```bash
-cd go
-go run ./cmd/fontpub package init /path/to/font-repo --write
-go run ./cmd/fontpub package validate /path/to/font-repo --json
-go run ./cmd/fontpub package preview /path/to/font-repo --package-id owner/repo --json
-go run ./cmd/fontpub workflow init /path/to/font-repo --yes
-```
-
-The CLI also supports `--help`, for example:
-
-```bash
-cd go
-go run ./cmd/fontpub --help
-go run ./cmd/fontpub package --help
-go run ./cmd/fontpub package init --help
-```
