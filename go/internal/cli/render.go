@@ -122,7 +122,25 @@ func printPackageCheckResults(w io.Writer, header string, results []PackageCheck
 				fmt.Fprintf(w, " (%s)", path)
 			}
 			fmt.Fprintln(w)
+			printFindingDetailLines(w, finding.Details)
 		}
+	}
+}
+
+func printFindingDetailLines(w io.Writer, details map[string]any) {
+	if len(details) == 0 {
+		return
+	}
+	for _, key := range []string{"local_path", "symlink_path", "reason", "status", "url"} {
+		value, ok := details[key]
+		if !ok {
+			continue
+		}
+		text := formatHumanDetailValue(value)
+		if text == "" {
+			continue
+		}
+		fmt.Fprintf(w, "      %s: %s\n", key, text)
 	}
 }
 

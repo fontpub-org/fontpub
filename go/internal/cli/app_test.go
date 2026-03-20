@@ -1031,6 +1031,7 @@ func TestVerifyHumanReadableFailure(t *testing.T) {
 		"Details:\n",
 		"  example/family: failed\n",
 		"installed asset file is missing (dist/ExampleSans-Regular.otf)\n",
+		"      local_path: " + filepath.Join(stateDir, "missing.otf") + "\n",
 	} {
 		if !strings.Contains(errOutput, want) {
 			t.Fatalf("verify stderr missing %q\n%s", want, errOutput)
@@ -1820,12 +1821,69 @@ func TestRepairHumanReadableDryRun(t *testing.T) {
 	for _, want := range []string{
 		"Repair results:\n",
 		"  example/family: repaired\n",
+		"  symlinks created: 1\n",
+		"  symlinks removed: 0\n",
 		"Planned actions:\n",
 		"  - create symlink [example/family@1.2.3] dist/ExampleSans-Regular.otf\n",
 		"  - write lockfile [example/family]\n",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("repair output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestRepairHumanReadableFailureIncludesDetails(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	symlinkPath := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: func() *string { v := "1.2.3"; return &v }(),
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{
+								Path:        "dist/ExampleSans-Regular.otf",
+								SHA256:      strings.Repeat("a", 64),
+								LocalPath:   filepath.Join(stateDir, "missing.otf"),
+								Active:      true,
+								SymlinkPath: &symlinkPath,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: activationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"repair", "example/family", "--activation-dir", activationDir}); code == 0 {
+		t.Fatalf("expected repair failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"repair failed\n",
+		"Details:\n",
+		"  example/family: failed\n",
+		"installed asset file is missing (dist/ExampleSans-Regular.otf)\n",
+		"      local_path: " + filepath.Join(stateDir, "missing.otf") + "\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("repair stderr missing %q\n%s", want, output)
 		}
 	}
 }

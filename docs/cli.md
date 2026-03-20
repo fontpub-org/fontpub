@@ -248,10 +248,12 @@ For mutating commands in human-readable mode:
 - success output SHOULD summarize the material local changes that occurred, such as assets written, symlinks created or removed, and files written
 - `--dry-run` output SHOULD clearly indicate that it is a plan and SHOULD include the planned actions
 - when no local change is required, the output SHOULD say why, not only that nothing changed
+- `repair` output SHOULD summarize what was reconciled, including symlink creation or removal counts when relevant
 
 For failures in human-readable mode:
 - error output SHOULD include the relevant structured details when available, such as `path`, `package_id`, `version_key`, or `flag`
 - error output SHOULD include a concise next step when the CLI can determine one
+- `verify` and `repair` failure output SHOULD include finding-specific details such as `local_path`, `symlink_path`, and `reason` when available
 
 ### JSON output
 

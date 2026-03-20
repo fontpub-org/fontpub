@@ -298,12 +298,16 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 		for _, result := range results {
 			fmt.Fprintf(a.Stdout, "  %s: no changes\n", result.PackageID)
 		}
+		fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
+		fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
 		return 0
 	}
 	fmt.Fprintln(a.Stdout, "Repair results:")
 	for _, item := range repaired {
 		fmt.Fprintf(a.Stdout, "  %s: repaired\n", item)
 	}
+	fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
+	fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
 	if dryRun && len(planned) > 0 {
 		printPlannedActions(a.Stdout, planned)
 	}
