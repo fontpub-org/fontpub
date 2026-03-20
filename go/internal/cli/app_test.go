@@ -128,6 +128,43 @@ func TestRunLSRemoteHumanReadable(t *testing.T) {
 	}
 }
 
+func TestRunLSRemoteHumanReadableEmptyState(t *testing.T) {
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return jsonResponse(http.StatusOK, protocol.RootIndex{
+					SchemaVersion: "1",
+					GeneratedAt:   "1970-01-01T00:00:00Z",
+					Packages:      map[string]protocol.RootIndexPackage{},
+				}), nil
+			}),
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"ls-remote"}); code != 0 {
+		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"no published packages\n",
+		"Next:\n",
+		"  check FONTPUB_BASE_URL or publish package metadata to the service\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("ls-remote empty-state output missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestUnknownFlagPrintsHelpHint(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	app := App{
@@ -349,6 +386,29 @@ func TestRunLSHumanReadable(t *testing.T) {
 	}
 }
 
+func TestRunLSHumanReadableEmptyState(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir(), BaseURL: "https://fontpub.org"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"ls"}); code != 0 {
+		t.Fatalf("Run() code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"no installed packages\n",
+		"Next:\n",
+		"  run: fontpub ls-remote\n",
+		"  run: fontpub install <owner>/<repo>\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("ls empty-state output missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestRunLSHumanReadableWithActivationDir(t *testing.T) {
 	dir := t.TempDir()
 	activationDir := t.TempDir()
@@ -476,6 +536,78 @@ func TestRunLSPackageNotInstalled(t *testing.T) {
 	}
 	if env.Error == nil || env.Error.Code != "NOT_INSTALLED" {
 		t.Fatalf("unexpected error: %+v", env)
+	}
+}
+
+func TestVerifyEmptyStatePrintsNextSteps(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir(), BaseURL: "https://fontpub.org"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"verify"}); code != 0 {
+		t.Fatalf("verify code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"no installed packages\n",
+		"Next:\n",
+		"  run: fontpub ls-remote\n",
+		"  run: fontpub install <owner>/<repo>\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("verify empty-state output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestUpdateEmptyStatePrintsNextSteps(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir(), BaseURL: "https://fontpub.org"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"update"}); code != 0 {
+		t.Fatalf("update code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"no installed packages\n",
+		"Next:\n",
+		"  run: fontpub ls-remote\n",
+		"  run: fontpub install <owner>/<repo>\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("update empty-state output missing %q\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "already up to date") {
+		t.Fatalf("update empty-state output should not imply installed packages:\n%s", output)
+	}
+}
+
+func TestRepairEmptyStatePrintsNextSteps(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir(), BaseURL: "https://fontpub.org"},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"repair"}); code != 0 {
+		t.Fatalf("repair code=%d stderr=%s", code, stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"no installed packages\n",
+		"Next:\n",
+		"  run: fontpub ls-remote\n",
+		"  run: fontpub install <owner>/<repo>\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("repair empty-state output missing %q\n%s", want, output)
+		}
 	}
 }
 

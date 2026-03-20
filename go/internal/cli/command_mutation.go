@@ -290,7 +290,7 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 		return a.writeJSON(env)
 	}
 	if len(results) == 0 {
-		fmt.Fprintln(a.Stdout, "no installed packages")
+		printNoInstalledPackages(a.Stdout)
 		return 0
 	}
 	if !changed {
@@ -433,6 +433,10 @@ func (a *App) runUpdate(ctx context.Context, args []string) int {
 	if !ok || len(lock.Packages) == 0 {
 		if target != "" {
 			return a.fail("update", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+		}
+		if !a.JSON {
+			printNoInstalledPackages(a.Stdout)
+			return 0
 		}
 		return a.writeUpdateResult(target, false, activate, dryRun, activationDir, nil)
 	}

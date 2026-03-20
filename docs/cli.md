@@ -265,6 +265,10 @@ For failures in human-readable mode:
 - unknown commands and missing subcommands SHOULD direct the user to the relevant `--help` output
 - `verify` and `repair` failure output SHOULD include finding-specific details such as `local_path`, `symlink_path`, and `reason` when available
 
+For empty-state success output in human-readable mode:
+- commands that find no published or installed packages SHOULD say so explicitly
+- when the CLI can suggest a clear next action, empty-state output SHOULD include it
+
 ### JSON output
 
 When `--json` is set:

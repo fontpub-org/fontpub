@@ -39,7 +39,7 @@ func (a *App) runLSRemote(ctx context.Context, args []string) int {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "ls-remote", Data: data})
 	}
 	if len(packages) == 0 {
-		fmt.Fprintln(a.Stdout, "no published packages")
+		printNoPublishedPackages(a.Stdout)
 		return 0
 	}
 	fmt.Fprintln(a.Stdout, "Available packages:")
@@ -167,7 +167,7 @@ func (a *App) runLS(_ context.Context, args []string) int {
 		return a.writeJSON(env)
 	}
 	if len(packagesData) == 0 {
-		fmt.Fprintln(a.Stdout, "no installed packages")
+		printNoInstalledPackages(a.Stdout)
 		return 0
 	}
 	packageIDs := make([]string, 0, len(packagesData))
@@ -289,7 +289,7 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 		return a.writeJSON(env)
 	}
 	if len(results) == 0 {
-		fmt.Fprintln(a.Stdout, "no installed packages")
+		printNoInstalledPackages(a.Stdout)
 		return 0
 	}
 	printPackageCheckResults(a.Stdout, "Verification results:", results)

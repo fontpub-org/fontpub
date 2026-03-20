@@ -136,6 +136,26 @@ func printPackageCheckResults(w io.Writer, header string, results []PackageCheck
 	}
 }
 
+func printNextHints(w io.Writer, hints ...string) {
+	if len(hints) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "Next:")
+	for _, hint := range hints {
+		fmt.Fprintf(w, "  %s\n", hint)
+	}
+}
+
+func printNoPublishedPackages(w io.Writer) {
+	fmt.Fprintln(w, "no published packages")
+	printNextHints(w, "check FONTPUB_BASE_URL or publish package metadata to the service")
+}
+
+func printNoInstalledPackages(w io.Writer) {
+	fmt.Fprintln(w, "no installed packages")
+	printNextHints(w, "run: fontpub ls-remote", "run: fontpub install <owner>/<repo>")
+}
+
 func printFindingDetailLines(w io.Writer, details map[string]any) {
 	if len(details) == 0 {
 		return
