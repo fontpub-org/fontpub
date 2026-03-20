@@ -14,6 +14,7 @@ type App struct {
 	Stdout  io.Writer
 	Stderr  io.Writer
 	Stdin   io.Reader
+	IsTTY   func() bool
 	JSON    bool
 	Command string
 	Now     func() time.Time
@@ -106,6 +107,24 @@ func plannedActionsToAny(actions []PlannedAction) []any {
 
 func Main() {
 	os.Exit(Run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func (a *App) isInteractive() bool {
+	if a.IsTTY != nil {
+		return a.IsTTY()
+	}
+	if a.Stdin == nil {
+		return false
+	}
+	file, ok := a.Stdin.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
 func (a *App) writeHelp(args []string) int {

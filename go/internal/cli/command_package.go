@@ -56,6 +56,9 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		if a.JSON {
 			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "required manifest fields could not be inferred", Details: map[string]any{"unresolved_fields": unresolved}})
 		}
+		if !a.isInteractive() {
+			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "required manifest fields could not be inferred", Details: map[string]any{"unresolved_fields": unresolved}})
+		}
 		if err := a.promptForManifestFields(&manifest, &inferences, unresolved); err != nil {
 			return a.fail("package init", asCLIError(err))
 		}

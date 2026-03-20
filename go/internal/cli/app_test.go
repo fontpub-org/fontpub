@@ -1396,7 +1396,13 @@ func TestPackageInitHumanReadableReportsConflicts(t *testing.T) {
 	runGit(t, root, "remote", "add", "origin", "https://github.com/example/family.git")
 
 	var stdout, stderr bytes.Buffer
-	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr, Stdin: strings.NewReader("1.002\n")}
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Stdin:  strings.NewReader("1.002\n"),
+		IsTTY:  func() bool { return true },
+	}
 	if code := app.Run(context.Background(), []string{"package", "init", root}); code != 0 {
 		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
@@ -1410,6 +1416,46 @@ func TestPackageInitHumanReadableReportsConflicts(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("package init output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestPackageInitFailsImmediatelyWithoutTTY(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "fonts"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "\x00\x01\x00\x00", "Example Sans", "Regular", 400, false)
+	if err := os.WriteFile(filepath.Join(root, "fonts", "ExampleSans-Regular.ttf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile ttf: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Stdin:  strings.NewReader("ignored\n"),
+		IsTTY:  func() bool { return false },
+	}
+	if code := app.Run(context.Background(), []string{"package", "init", root}); code == 0 {
+		t.Fatalf("expected package init failure")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("expected no prompt output, got:\n%s", got)
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INPUT_REQUIRED: required manifest fields could not be inferred\n",
+		"  unresolved_fields: author, version\n",
+		"Next:\n",
+		"  rerun interactively or edit fontpub.json to fill the missing fields\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("package init stderr missing %q\n%s", want, output)
 		}
 	}
 }

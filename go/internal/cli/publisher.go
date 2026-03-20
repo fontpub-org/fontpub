@@ -178,8 +178,8 @@ func (a *App) buildCandidatePackageDetail(root, explicitPackageID string) (proto
 }
 
 func (a *App) promptForManifestFields(manifest *protocol.Manifest, inferences *[]inferenceRecord, unresolved []string) error {
-	if a.Stdin == nil {
-		return &CLIError{Code: "TTY_REQUIRED", Message: "interactive input is required", Details: map[string]any{}}
+	if !a.isInteractive() || a.Stdin == nil {
+		return &CLIError{Code: "INPUT_REQUIRED", Message: "required manifest fields could not be inferred", Details: map[string]any{"unresolved_fields": unresolved}}
 	}
 	reader := bufio.NewReader(a.Stdin)
 	for _, field := range unresolved {
@@ -224,7 +224,6 @@ func readManifestAtRoot(root string) (protocol.Manifest, error) {
 	}
 	return manifest, nil
 }
-
 
 func oneOptionalPath(args []string) (string, *CLIError) {
 	if len(args) > 1 {
@@ -361,7 +360,6 @@ func mustMap(value any) map[string]any {
 	_ = json.Unmarshal(body, &out)
 	return out
 }
-
 
 func protocolErrorToCLI(err error) *CLIError {
 	message := err.Error()
