@@ -69,7 +69,7 @@ func (a *App) fail(command string, err *CLIError) int {
 		})
 		return 1
 	}
-	fmt.Fprintf(a.Stderr, "%s: %s\n", err.Code, err.Message)
+	printHumanError(a.Stderr, command, err)
 	return 1
 }
 

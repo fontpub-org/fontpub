@@ -245,6 +245,10 @@ For mutating commands in human-readable mode:
 - `--dry-run` output SHOULD clearly indicate that it is a plan and SHOULD include the planned actions
 - when no local change is required, the output SHOULD say why, not only that nothing changed
 
+For failures in human-readable mode:
+- error output SHOULD include the relevant structured details when available, such as `path`, `package_id`, `version_key`, or `flag`
+- error output SHOULD include a concise next step when the CLI can determine one
+
 ### JSON output
 
 When `--json` is set:

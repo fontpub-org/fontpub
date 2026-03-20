@@ -67,6 +67,28 @@ func TestRunListJSON(t *testing.T) {
 	}
 }
 
+func TestRunWithoutCommandPrintsNextStep(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), nil); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INPUT_REQUIRED: command is required\n",
+		"Next:\n",
+		"  run: fontpub --help\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestRunListHumanReadable(t *testing.T) {
 	client := &MetadataClient{
 		BaseURL:   "https://fontpub.org",
@@ -101,6 +123,29 @@ func TestRunListHumanReadable(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("list output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestUnknownFlagPrintsHelpHint(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"status", "--bogus"}); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INPUT_REQUIRED: unknown flag\n",
+		"  flag: --bogus\n",
+		"Next:\n",
+		"  run: fontpub status --help\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
 		}
 	}
 }
@@ -564,6 +609,29 @@ func TestUpdateInstallsLatestVersion(t *testing.T) {
 	}
 }
 
+func TestNotInstalledErrorSuggestsInstall(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"status", "example/family"}); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"NOT_INSTALLED: package is not installed\n",
+		"  package_id: example/family\n",
+		"Next:\n",
+		"  run: fontpub install example/family\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestUpdateHumanReadableDryRun(t *testing.T) {
 	stateDir := t.TempDir()
 	activationDir := t.TempDir()
@@ -691,6 +759,53 @@ func TestVerifyFailureForMissingFile(t *testing.T) {
 	}
 	if err := protocol.ValidateCLISchema("verify-result.schema.json", env); err != nil {
 		t.Fatalf("ValidateCLISchema(verify failure): %v", err)
+	}
+}
+
+func TestPackageValidateMissingManifestSuggestsInit(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"package", "validate", root}); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"LOCAL_FILE_MISSING: fontpub.json was not found\n",
+		"  path: " + filepath.Join(root, "fontpub.json") + "\n",
+		"Next:\n",
+		"  run: fontpub package init " + root + " --write\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestActivationDirErrorSuggestsFlagOrEnv(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: t.TempDir()},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"activate", "example/family"}); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INPUT_REQUIRED: activation directory is required\n",
+		"  flag: --activation-dir\n",
+		"Next:\n",
+		"  pass --activation-dir <path> or set FONTPUB_ACTIVATION_DIR\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
 	}
 }
 
