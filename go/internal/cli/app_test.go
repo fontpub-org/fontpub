@@ -1750,6 +1750,67 @@ func TestVerifyHumanReadableFailure(t *testing.T) {
 	}
 }
 
+func TestVerifyHumanReadableFailureForWrongSymlinkTarget(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	wrongTarget := filepath.Join(stateDir, "wrong", "ExampleSans-Regular.otf")
+	for _, path := range []string{localPath, wrongTarget} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("os.MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("font-bytes"), 0o644); err != nil {
+			t.Fatalf("os.WriteFile: %v", err)
+		}
+	}
+	sum := sha256.Sum256([]byte("font-bytes"))
+	symlinkPath := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(wrongTarget, symlinkPath); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: func() *string { v := "1.2.3"; return &v }(),
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:        "dist/ExampleSans-Regular.otf",
+							SHA256:      fmtHex(sum[:]),
+							LocalPath:   localPath,
+							Active:      true,
+							SymlinkPath: &symlinkPath,
+						}},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: stateDir}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"verify", "example/family"}); code == 0 {
+		t.Fatalf("expected verify failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"verification failed\n",
+		"activation symlink points to the wrong file (dist/ExampleSans-Regular.otf)\n",
+		"      symlink_path: " + symlinkPath + "\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
+	}
+}
+
 func TestPackageInitJSONUsesExistingManifestFields(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
@@ -2750,6 +2811,60 @@ func TestRepairHumanReadableFailureIncludesDetails(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("repair stderr missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestRepairHumanReadableFailureForHashMismatchIncludesDetails(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(localPath, []byte("actual-font-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:      "dist/ExampleSans-Regular.otf",
+							SHA256:    strings.Repeat("a", 64),
+							LocalPath: localPath,
+						}},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: activationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"repair", "example/family", "--activation-dir", activationDir}); code == 0 {
+		t.Fatalf("expected repair failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"repair failed\n",
+		"installed asset file hash does not match lockfile (dist/ExampleSans-Regular.otf)\n",
+		"      local_path: " + localPath + "\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
 		}
 	}
 }
