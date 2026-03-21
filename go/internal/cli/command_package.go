@@ -78,14 +78,6 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		"conflicts":         conflictRecordsToAny(conflicts),
 		"unresolved_fields": stringSliceToAny(unresolved),
 	}
-	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package init", Data: data}
-		if err := protocol.ValidatePackageInitResult(env); err != nil {
-			return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "package init output validation failed", Details: map[string]any{"reason": err.Error()}})
-		}
-		return a.writeJSON(env)
-	}
-
 	if writeFile {
 		target := filepath.Join(root, "fontpub.json")
 		planned := []PlannedAction{{Type: "write_manifest", Path: target}}
@@ -101,6 +93,13 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 				return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "could not write manifest", Details: map[string]any{"path": target, "reason": err.Error()}})
 			}
 		}
+		if a.JSON {
+			env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package init", Data: data}
+			if err := protocol.ValidatePackageInitResult(env); err != nil {
+				return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "package init output validation failed", Details: map[string]any{"reason": err.Error()}})
+			}
+			return a.writeJSON(env)
+		}
 		if dryRun {
 			fmt.Fprintln(a.Stdout, "Manifest write plan")
 			fmt.Fprintf(a.Stdout, "  path: %s\n", target)
@@ -112,6 +111,14 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		fmt.Fprintf(a.Stdout, "  path: %s\n", target)
 		fmt.Fprintf(a.Stdout, "  files discovered: %d\n", len(manifest.Files))
 		return 0
+	}
+
+	if a.JSON {
+		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package init", Data: data}
+		if err := protocol.ValidatePackageInitResult(env); err != nil {
+			return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "package init output validation failed", Details: map[string]any{"reason": err.Error()}})
+		}
+		return a.writeJSON(env)
 	}
 
 	fmt.Fprintln(a.Stdout, "Candidate fontpub.json:")

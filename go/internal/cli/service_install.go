@@ -53,10 +53,7 @@ func (a *App) installDetail(ctx context.Context, lock *protocol.Lockfile, detail
 			return false, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "activation directory is required for --activate", Details: map[string]any{"flag": "--activation-dir"}}
 		}
 		if dryRun {
-			installCopy := *lock
-			if installCopy.Packages == nil {
-				installCopy.Packages = map[string]protocol.LockedPackage{}
-			}
+			installCopy := cloneLockfile(*lock)
 			pkgCopy := installCopy.Packages[packageID]
 			if pkgCopy.InstalledVersions == nil {
 				pkgCopy.InstalledVersions = map[string]protocol.InstalledVersion{}

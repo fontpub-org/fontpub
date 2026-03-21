@@ -33,6 +33,47 @@ func (a *App) loadOrInitLockfile() (protocol.Lockfile, error) {
 	}, nil
 }
 
+func cloneLockfile(lock protocol.Lockfile) protocol.Lockfile {
+	out := protocol.Lockfile{
+		SchemaVersion: lock.SchemaVersion,
+		GeneratedAt:   lock.GeneratedAt,
+		Packages:      map[string]protocol.LockedPackage{},
+	}
+	for packageID, pkg := range lock.Packages {
+		clonedPkg := protocol.LockedPackage{
+			InstalledVersions: map[string]protocol.InstalledVersion{},
+		}
+		if pkg.ActiveVersionKey != nil {
+			active := *pkg.ActiveVersionKey
+			clonedPkg.ActiveVersionKey = &active
+		}
+		for versionKey, version := range pkg.InstalledVersions {
+			clonedVersion := protocol.InstalledVersion{
+				Version:     version.Version,
+				VersionKey:  version.VersionKey,
+				InstalledAt: version.InstalledAt,
+				Assets:      make([]protocol.LockedAsset, 0, len(version.Assets)),
+			}
+			for _, asset := range version.Assets {
+				clonedAsset := protocol.LockedAsset{
+					Path:      asset.Path,
+					SHA256:    asset.SHA256,
+					LocalPath: asset.LocalPath,
+					Active:    asset.Active,
+				}
+				if asset.SymlinkPath != nil {
+					symlinkPath := *asset.SymlinkPath
+					clonedAsset.SymlinkPath = &symlinkPath
+				}
+				clonedVersion.Assets = append(clonedVersion.Assets, clonedAsset)
+			}
+			clonedPkg.InstalledVersions[versionKey] = clonedVersion
+		}
+		out.Packages[packageID] = clonedPkg
+	}
+	return out
+}
+
 func packageResultsToDetails(results []PackageCheckResult) map[string]any {
 	items := make([]any, 0, len(results))
 	for _, result := range results {

@@ -904,6 +904,66 @@ func TestInstallHumanReadableSummaries(t *testing.T) {
 	}
 }
 
+func TestInstallDetailDryRunActivateDoesNotMutateLock(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	assetSHA := strings.Repeat("a", 64)
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.2": {
+						Version:    "1.2.2",
+						VersionKey: "1.2.2",
+						Assets: []protocol.LockedAsset{
+							{
+								Path:      "dist/ExampleSans-Regular.otf",
+								SHA256:    assetSHA,
+								LocalPath: filepath.Join(stateDir, "packages", "example", "family", "1.2.2", "dist", "ExampleSans-Regular.otf"),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: activationDir},
+		Now:    func() time.Time { return time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC) },
+	}
+	detail := protocol.VersionedPackageDetail{
+		PackageID:  "example/family",
+		Version:    "1.2.3",
+		VersionKey: "1.2.3",
+		Assets: []protocol.VersionedAsset{
+			{Path: "dist/ExampleSans-Regular.otf", SHA256: assetSHA},
+		},
+	}
+
+	changed, planned, err := app.installDetail(context.Background(), &lock, detail, true, activationDir, true)
+	if err != nil {
+		t.Fatalf("installDetail: %v", err)
+	}
+	if !changed {
+		t.Fatalf("expected dry-run installDetail to report changes")
+	}
+	if len(planned) == 0 {
+		t.Fatalf("expected planned actions")
+	}
+	pkg := lock.Packages["example/family"]
+	if _, ok := pkg.InstalledVersions["1.2.3"]; ok {
+		t.Fatalf("dry-run mutated installed versions: %#v", pkg.InstalledVersions)
+	}
+	if pkg.ActiveVersionKey != nil {
+		t.Fatalf("dry-run mutated active version: %#v", *pkg.ActiveVersionKey)
+	}
+	if asset := pkg.InstalledVersions["1.2.2"].Assets[0]; asset.Active || asset.SymlinkPath != nil {
+		t.Fatalf("dry-run mutated existing asset: %#v", asset)
+	}
+}
+
 func TestUpdateInstallsLatestVersion(t *testing.T) {
 	stateDir := t.TempDir()
 	activationDir := t.TempDir()
@@ -1377,6 +1437,40 @@ func TestPackageInitWriteHumanReadable(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("package init write output missing %q\n%s", want, output)
 		}
+	}
+	body, err := os.ReadFile(filepath.Join(root, "fontpub.json"))
+	if err != nil {
+		t.Fatalf("os.ReadFile manifest: %v", err)
+	}
+	if !strings.Contains(string(body), `"name":"Embedded Family"`) {
+		t.Fatalf("manifest was not rewritten with inferred name:\n%s", string(body))
+	}
+}
+
+func TestPackageInitWriteJSONAlsoWritesManifest(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	fontBody := buildTestSFNT(t, "OTTO", "Embedded Family", "Bold Italic", 700, true)
+	if err := os.WriteFile(filepath.Join(root, "dist", "Misleading-Regular.otf"), fontBody, 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--write", "--yes", "--json"}); code != 0 {
+		t.Fatalf("package init write code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if err := protocol.ValidatePackageInitResult(env); err != nil {
+		t.Fatalf("ValidatePackageInitResult: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(root, "fontpub.json"))
 	if err != nil {
@@ -2076,6 +2170,26 @@ func TestWorkflowInitDryRunAndWrite(t *testing.T) {
 	}
 }
 
+func TestWorkflowInitJSONAlsoWritesFile(t *testing.T) {
+	root := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	app := App{Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
+	if code := app.Run(context.Background(), []string{"workflow", "init", root, "--yes", "--json"}); code != 0 {
+		t.Fatalf("workflow init write code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if env.Command != "workflow init" || !env.OK {
+		t.Fatalf("unexpected env: %+v", env)
+	}
+	workflowPath := filepath.Join(root, ".github", "workflows", "fontpub.yml")
+	if _, err := os.Stat(workflowPath); err != nil {
+		t.Fatalf("os.Stat workflow: %v", err)
+	}
+}
+
 func TestWorkflowInitHumanReadableDryRunAndWrite(t *testing.T) {
 	root := t.TempDir()
 	var stdout, stderr bytes.Buffer
@@ -2296,6 +2410,65 @@ func TestDeactivateAndUninstallHumanReadable(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("uninstall output missing %q\n%s", want, output)
 		}
+	}
+}
+
+func TestDeactivateNoOpDoesNotRewriteLockfile(t *testing.T) {
+	stateDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(localPath, []byte("font-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{
+								Path:      "dist/ExampleSans-Regular.otf",
+								SHA256:    strings.Repeat("a", 64),
+								LocalPath: localPath,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Now:    func() time.Time { return time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC) },
+	}
+	if code := app.Run(context.Background(), []string{"deactivate", "example/family"}); code != 0 {
+		t.Fatalf("deactivate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if output := stdout.String(); !strings.Contains(output, "example/family is already inactive\n") {
+		t.Fatalf("unexpected deactivate output:\n%s", output)
+	}
+
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	if saved.GeneratedAt != "2026-01-02T00:00:00Z" {
+		t.Fatalf("expected no-op deactivate to leave lockfile untouched, got generated_at=%q", saved.GeneratedAt)
 	}
 }
 

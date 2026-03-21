@@ -129,19 +129,19 @@ func (a *App) runDeactivate(_ context.Context, args []string) int {
 	if err != nil {
 		return a.fail("deactivate", asCLIError(err))
 	}
-	planned, decErr := a.deactivatePackage(&lock, packageID, dryRun)
+	planned, changed, decErr := a.deactivatePackage(&lock, packageID, dryRun)
 	if decErr != nil {
 		return a.fail("deactivate", asCLIError(decErr))
 	}
-	if !dryRun {
+	if changed && !dryRun {
 		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
 		if err := a.saveLockfile(lock); err != nil {
 			return a.fail("deactivate", asCLIError(err))
 		}
-	} else {
+	} else if changed {
 		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
 	}
-	return a.writeDeactivateResult(packageID, len(planned) > 1, dryRun, planned)
+	return a.writeDeactivateResult(packageID, changed, dryRun, planned)
 }
 
 func (a *App) runRepair(_ context.Context, args []string) int {

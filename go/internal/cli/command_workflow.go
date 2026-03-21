@@ -37,13 +37,6 @@ func (a *App) runWorkflowInit(_ context.Context, args []string) int {
 	target := filepath.Join(root, ".github", "workflows", "fontpub.yml")
 	body := []byte(generatedWorkflowYAML(a.Config.BaseURL))
 	planned := []PlannedAction{{Type: "write_workflow", PackageID: "", Path: target}}
-	if a.JSON {
-		data := map[string]any{"changed": true}
-		if dryRun {
-			data["planned_actions"] = plannedActionsToAny(planned)
-		}
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "workflow init", Data: data})
-	}
 	if _, err := os.Stat(target); err == nil && !yes {
 		return a.fail("workflow init", &CLIError{Code: "INPUT_REQUIRED", Message: "refusing to overwrite existing workflow without --yes", Details: map[string]any{"path": target}})
 	}
@@ -54,6 +47,13 @@ func (a *App) runWorkflowInit(_ context.Context, args []string) int {
 		if err := os.WriteFile(target, body, 0o644); err != nil {
 			return a.fail("workflow init", &CLIError{Code: "INTERNAL_ERROR", Message: "could not write workflow", Details: map[string]any{"path": target, "reason": err.Error()}})
 		}
+	}
+	if a.JSON {
+		data := map[string]any{"changed": true}
+		if dryRun {
+			data["planned_actions"] = plannedActionsToAny(planned)
+		}
+		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "workflow init", Data: data})
 	}
 	if dryRun {
 		fmt.Fprintln(a.Stdout, "Workflow write plan")

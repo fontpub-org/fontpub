@@ -58,19 +58,24 @@ func (a *App) activateVersion(lock *protocol.Lockfile, packageID, versionKey, ac
 	return planned, nil
 }
 
-func (a *App) deactivatePackage(lock *protocol.Lockfile, packageID string, dryRun bool) ([]PlannedAction, error) {
+func (a *App) deactivatePackage(lock *protocol.Lockfile, packageID string, dryRun bool) ([]PlannedAction, bool, error) {
 	pkg, ok := lock.Packages[packageID]
 	if !ok {
-		return nil, &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": packageID}}
+		return nil, false, &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": packageID}}
 	}
 	planned := make([]PlannedAction, 0)
+	changed := pkg.ActiveVersionKey != nil
 	for versionKey, version := range pkg.InstalledVersions {
 		for i := range version.Assets {
+			if version.Assets[i].Active {
+				changed = true
+			}
 			if version.Assets[i].SymlinkPath != nil {
+				changed = true
 				planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: packageID, VersionKey: versionKey, Path: version.Assets[i].Path})
 				if !dryRun {
 					if err := removeFileIfExists(*version.Assets[i].SymlinkPath); err != nil {
-						return nil, &CLIError{Code: "INTERNAL_ERROR", Message: "could not remove activation symlink", Details: map[string]any{"path": *version.Assets[i].SymlinkPath, "reason": err.Error()}}
+						return nil, false, &CLIError{Code: "INTERNAL_ERROR", Message: "could not remove activation symlink", Details: map[string]any{"path": *version.Assets[i].SymlinkPath, "reason": err.Error()}}
 					}
 				}
 			}
@@ -81,7 +86,7 @@ func (a *App) deactivatePackage(lock *protocol.Lockfile, packageID string, dryRu
 	}
 	pkg.ActiveVersionKey = nil
 	lock.Packages[packageID] = pkg
-	return planned, nil
+	return planned, changed, nil
 }
 
 func (a *App) resolveSymlinkPath(activationDir, packageID string, asset protocol.LockedAsset) string {
