@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 func plannedActionCount(planned []PlannedAction, actionType string) int {
@@ -186,6 +188,43 @@ func (a *App) writeUpdateResult(target string, changed, activate, dryRun bool, a
 		printDetailLine(a.Stdout, "symlinks created", plannedActionCount(planned, "create_symlink"))
 	}
 	if dryRun {
+		printPlannedActions(a.Stdout, planned)
+	}
+	return 0
+}
+
+func (a *App) writeRepairResult(results []PackageCheckResult, repaired []any, changed, dryRun bool, planned []PlannedAction) int {
+	data := map[string]any{"changed": changed, "repaired_packages": repaired}
+	if dryRun {
+		data["planned_actions"] = plannedActionsToAny(planned)
+	}
+	if a.JSON {
+		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "repair", Data: data}
+		if err := protocol.ValidateRepairResult(env); err != nil {
+			return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "repair output validation failed", Details: map[string]any{"reason": err.Error()}})
+		}
+		return a.writeJSON(env)
+	}
+	if len(results) == 0 {
+		printNoInstalledPackages(a.Stdout)
+		return 0
+	}
+	if !changed {
+		fmt.Fprintln(a.Stdout, "Repair results:")
+		for _, result := range results {
+			fmt.Fprintf(a.Stdout, "  %s: no changes\n", result.PackageID)
+		}
+		fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
+		fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
+		return 0
+	}
+	fmt.Fprintln(a.Stdout, "Repair results:")
+	for _, item := range repaired {
+		fmt.Fprintf(a.Stdout, "  %s: repaired\n", item)
+	}
+	fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
+	fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
+	if dryRun && len(planned) > 0 {
 		printPlannedActions(a.Stdout, planned)
 	}
 	return 0

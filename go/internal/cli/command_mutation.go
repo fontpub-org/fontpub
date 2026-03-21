@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
@@ -103,97 +102,35 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 	if !ok {
 		lock = protocol.Lockfile{SchemaVersion: "1", GeneratedAt: a.now().UTC().Format(time.RFC3339), Packages: map[string]protocol.LockedPackage{}}
 	}
-	results := make([]PackageCheckResult, 0)
+	plans := make([]repairPackagePlan, 0)
 	planned := make([]PlannedAction, 0)
 	changed := false
 	for packageID, pkg := range lock.Packages {
 		if opts.PackageID != "" && packageID != opts.PackageID {
 			continue
 		}
-		activeVersions := versionKeysWithActiveAssets(pkg)
-		chosenActive := ""
-		if len(activeVersions) > 0 {
-			sorted := SortedInstalledVersionKeys(pkg)
-			for _, key := range sorted {
-				for _, active := range activeVersions {
-					if key == active {
-						chosenActive = key
-						break
-					}
-				}
-				if chosenActive != "" {
-					break
-				}
-			}
+		plan := a.inspectRepairPackage(packageID, pkg, opts.ActivationDir)
+		plans = append(plans, plan)
+		actions, err := a.applyRepairPlan(&lock, plan, opts.DryRun)
+		if err != nil {
+			return a.fail("repair", asCLIError(err))
 		}
-		findings := make([]Finding, 0)
-		for versionKey, version := range pkg.InstalledVersions {
-			for i := range version.Assets {
-				finding := verifyLockedAsset(version.Assets[i])
-				activationBroken := finding != nil && finding.Code == "ACTIVATION_BROKEN"
-				if finding != nil && (finding.Code == "LOCAL_FILE_MISSING" || finding.Code == "LOCAL_FILE_HASH_MISMATCH") {
-					findings = append(findings, *finding)
-					continue
-				}
-				expectedActive := chosenActive != "" && versionKey == chosenActive
-				linkPath := ""
-				if expectedActive {
-					if opts.ActivationDir == "" {
-						findings = append(findings, Finding{Code: "INPUT_REQUIRED", Severity: "error", Subject: "activation", Message: "activation directory is required to repair active assets", Details: map[string]any{"package_id": packageID}})
-						continue
-					}
-					if version.Assets[i].SymlinkPath != nil && *version.Assets[i].SymlinkPath != "" {
-						linkPath = *version.Assets[i].SymlinkPath
-					} else {
-						linkPath = a.resolveSymlinkPath(opts.ActivationDir, packageID, version.Assets[i])
-					}
-					if version.Assets[i].SymlinkPath == nil || *version.Assets[i].SymlinkPath != linkPath || !version.Assets[i].Active || activationBroken {
-						planned = append(planned, PlannedAction{Type: "create_symlink", PackageID: packageID, VersionKey: versionKey, Path: version.Assets[i].Path})
-						changed = true
-						if !opts.DryRun {
-							if err := atomicSymlink(version.Assets[i].LocalPath, linkPath); err != nil {
-								return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "could not repair symlink", Details: map[string]any{"path": linkPath, "reason": err.Error()}})
-							}
-						}
-					}
-					version.Assets[i].Active = true
-					version.Assets[i].SymlinkPath = &linkPath
-				} else {
-					if version.Assets[i].SymlinkPath != nil {
-						planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: packageID, VersionKey: versionKey, Path: version.Assets[i].Path})
-						changed = true
-						if !opts.DryRun {
-							if err := removeFileIfExists(*version.Assets[i].SymlinkPath); err != nil {
-								return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "could not remove stale symlink", Details: map[string]any{"path": *version.Assets[i].SymlinkPath, "reason": err.Error()}})
-							}
-						}
-					}
-					version.Assets[i].Active = false
-					version.Assets[i].SymlinkPath = nil
-				}
-			}
-			pkg.InstalledVersions[versionKey] = version
+		planned = append(planned, actions...)
+		if plan.Changed {
+			changed = true
 		}
-		if len(findings) == 0 {
-			if chosenActive == "" {
-				pkg.ActiveVersionKey = nil
-			} else {
-				pkg.ActiveVersionKey = &chosenActive
-			}
-			lock.Packages[packageID] = pkg
-		}
-		sortFindings(findings)
-		results = append(results, PackageCheckResult{PackageID: packageID, OK: len(findings) == 0, Findings: findings})
 	}
-	if opts.PackageID != "" && len(results) == 0 {
+	if opts.PackageID != "" && len(plans) == 0 {
 		return a.fail("repair", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 	}
+	results := make([]PackageCheckResult, 0, len(plans))
 	allOK := true
 	repaired := make([]any, 0)
-	for _, result := range results {
-		allOK = allOK && result.OK
-		if result.OK {
-			repaired = append(repaired, result.PackageID)
+	for _, plan := range plans {
+		results = append(results, plan.Result)
+		allOK = allOK && plan.Result.OK
+		if plan.Result.OK {
+			repaired = append(repaired, plan.Result.PackageID)
 		}
 	}
 	if !allOK {
@@ -203,40 +140,7 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 	if err != nil {
 		return a.fail("repair", asCLIError(err))
 	}
-	data := map[string]any{"changed": changed, "repaired_packages": repaired}
-	if opts.DryRun {
-		data["planned_actions"] = plannedActionsToAny(planned)
-	}
-	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "repair", Data: data}
-		if err := protocol.ValidateRepairResult(env); err != nil {
-			return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "repair output validation failed", Details: map[string]any{"reason": err.Error()}})
-		}
-		return a.writeJSON(env)
-	}
-	if len(results) == 0 {
-		printNoInstalledPackages(a.Stdout)
-		return 0
-	}
-	if !changed {
-		fmt.Fprintln(a.Stdout, "Repair results:")
-		for _, result := range results {
-			fmt.Fprintf(a.Stdout, "  %s: no changes\n", result.PackageID)
-		}
-		fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
-		fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
-		return 0
-	}
-	fmt.Fprintln(a.Stdout, "Repair results:")
-	for _, item := range repaired {
-		fmt.Fprintf(a.Stdout, "  %s: repaired\n", item)
-	}
-	fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
-	fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
-	if opts.DryRun && len(planned) > 0 {
-		printPlannedActions(a.Stdout, planned)
-	}
-	return 0
+	return a.writeRepairResult(results, repaired, changed, opts.DryRun, planned)
 }
 
 func (a *App) runUninstall(_ context.Context, args []string) int {
