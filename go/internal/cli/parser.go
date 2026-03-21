@@ -129,3 +129,135 @@ func parseActivateOptions(args []string) (activateOptions, *CLIError) {
 		DryRun:        parsed.boolValue("--dry-run"),
 	}, nil
 }
+
+type lsOptions struct {
+	PackageID     string
+	ActivationDir string
+}
+
+func parseLSOptions(args []string) (lsOptions, *CLIError) {
+	parsed, err := parseArgs(args, nil, []string{"--activation-dir"})
+	if err != nil {
+		return lsOptions{}, err
+	}
+	if len(parsed.positionals) > 1 {
+		return lsOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "ls accepts at most one package id", Details: map[string]any{}}
+	}
+	opts := lsOptions{ActivationDir: parsed.stringValue("--activation-dir")}
+	if len(parsed.positionals) == 1 {
+		opts.PackageID = normalizePackageID(parsed.positionals[0])
+	}
+	return opts, nil
+}
+
+type verifyOptions struct {
+	PackageID     string
+	ActivationDir string
+}
+
+func parseVerifyOptions(args []string) (verifyOptions, *CLIError) {
+	parsed, err := parseArgs(args, nil, []string{"--activation-dir"})
+	if err != nil {
+		return verifyOptions{}, err
+	}
+	if len(parsed.positionals) > 1 {
+		return verifyOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "verify accepts at most one package id", Details: map[string]any{}}
+	}
+	opts := verifyOptions{ActivationDir: parsed.stringValue("--activation-dir")}
+	if len(parsed.positionals) == 1 {
+		opts.PackageID = normalizePackageID(parsed.positionals[0])
+	}
+	return opts, nil
+}
+
+type deactivateOptions struct {
+	PackageID string
+	DryRun    bool
+}
+
+func parseDeactivateOptions(args []string) (deactivateOptions, *CLIError) {
+	parsed, err := parseArgs(args, []string{"--dry-run"}, []string{"--activation-dir"})
+	if err != nil {
+		return deactivateOptions{}, err
+	}
+	if len(parsed.positionals) != 1 {
+		return deactivateOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "deactivate requires <owner>/<repo>", Details: map[string]any{}}
+	}
+	return deactivateOptions{
+		PackageID: normalizePackageID(parsed.positionals[0]),
+		DryRun:    parsed.boolValue("--dry-run"),
+	}, nil
+}
+
+type repairOptions struct {
+	PackageID     string
+	ActivationDir string
+	DryRun        bool
+}
+
+func parseRepairOptions(args []string) (repairOptions, *CLIError) {
+	parsed, err := parseArgs(args, []string{"--dry-run", "--yes"}, []string{"--activation-dir"})
+	if err != nil {
+		return repairOptions{}, err
+	}
+	if len(parsed.positionals) > 1 {
+		return repairOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "repair accepts at most one package id", Details: map[string]any{}}
+	}
+	opts := repairOptions{
+		ActivationDir: parsed.stringValue("--activation-dir"),
+		DryRun:        parsed.boolValue("--dry-run"),
+	}
+	if len(parsed.positionals) == 1 {
+		opts.PackageID = normalizePackageID(parsed.positionals[0])
+	}
+	return opts, nil
+}
+
+type uninstallOptions struct {
+	PackageID string
+	Version   string
+	DryRun    bool
+	All       bool
+}
+
+func parseUninstallOptions(args []string) (uninstallOptions, *CLIError) {
+	parsed, err := parseArgs(args, []string{"--dry-run", "--yes", "--all"}, []string{"--activation-dir", "--version"})
+	if err != nil {
+		return uninstallOptions{}, err
+	}
+	if len(parsed.positionals) != 1 {
+		return uninstallOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "uninstall requires <owner>/<repo>", Details: map[string]any{}}
+	}
+	return uninstallOptions{
+		PackageID: normalizePackageID(parsed.positionals[0]),
+		Version:   parsed.stringValue("--version"),
+		DryRun:    parsed.boolValue("--dry-run"),
+		All:       parsed.boolValue("--all"),
+	}, nil
+}
+
+type updateOptions struct {
+	PackageID     string
+	ActivationDir string
+	DryRun        bool
+	Activate      bool
+}
+
+func parseUpdateOptions(args []string) (updateOptions, *CLIError) {
+	parsed, err := parseArgs(args, []string{"--dry-run", "--activate"}, []string{"--activation-dir"})
+	if err != nil {
+		return updateOptions{}, err
+	}
+	if len(parsed.positionals) > 1 {
+		return updateOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "update accepts at most one package id", Details: map[string]any{}}
+	}
+	opts := updateOptions{
+		ActivationDir: parsed.stringValue("--activation-dir"),
+		DryRun:        parsed.boolValue("--dry-run"),
+		Activate:      parsed.boolValue("--activate"),
+	}
+	if len(parsed.positionals) == 1 {
+		opts.PackageID = normalizePackageID(parsed.positionals[0])
+	}
+	return opts, nil
+}

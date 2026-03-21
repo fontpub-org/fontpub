@@ -95,19 +95,12 @@ func (a *App) runShow(ctx context.Context, args []string) int {
 }
 
 func (a *App) runLS(_ context.Context, args []string) int {
-	activationDir, rest, errObj := extractStringFlag(args, "--activation-dir")
+	opts, errObj := parseLSOptions(args)
 	if errObj != nil {
 		return a.fail("ls", errObj)
 	}
-	if activationDir == "" {
-		activationDir = a.Config.DefaultActivationDir
-	}
-	var target string
-	if len(rest) > 1 {
-		return a.fail("ls", &CLIError{Code: "INPUT_REQUIRED", Message: "ls accepts at most one package id", Details: map[string]any{}})
-	}
-	if len(rest) == 1 {
-		target = normalizePackageID(rest[0])
+	if opts.ActivationDir == "" {
+		opts.ActivationDir = a.Config.DefaultActivationDir
 	}
 
 	lock, ok, err := LockfileStore{Path: a.Config.LockfilePath()}.Load()
@@ -122,7 +115,7 @@ func (a *App) runLS(_ context.Context, args []string) int {
 		}
 		sort.Strings(packageIDs)
 		for _, packageID := range packageIDs {
-			if target != "" && packageID != target {
+			if opts.PackageID != "" && packageID != opts.PackageID {
 				continue
 			}
 			pkg := lock.Packages[packageID]
@@ -140,9 +133,9 @@ func (a *App) runLS(_ context.Context, args []string) int {
 			}
 		}
 	}
-	if target != "" {
-		if _, exists := packagesData[target]; !exists {
-			return a.fail("ls", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+	if opts.PackageID != "" {
+		if _, exists := packagesData[opts.PackageID]; !exists {
+			return a.fail("ls", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 		}
 	}
 
@@ -178,7 +171,7 @@ func (a *App) runLS(_ context.Context, args []string) int {
 		fmt.Fprintf(a.Stdout, "  installed versions: %s\n", strings.Join(versionTexts, ", "))
 		fmt.Fprintf(a.Stdout, "  active version: %s\n", active)
 		pkg := lock.Packages[packageID]
-		dirText, statusText := humanStatusActivationSummary(pkg, activationDir)
+		dirText, statusText := humanStatusActivationSummary(pkg, opts.ActivationDir)
 		fmt.Fprintf(a.Stdout, "  activation dir: %s\n", dirText)
 		fmt.Fprintf(a.Stdout, "  activation status: %s\n", statusText)
 	}
@@ -216,16 +209,9 @@ func humanStatusActivationSummary(pkg protocol.LockedPackage, activationDir stri
 }
 
 func (a *App) runVerify(_ context.Context, args []string) int {
-	activationDir, rest, errObj := extractStringFlag(args, "--activation-dir")
+	opts, errObj := parseVerifyOptions(args)
 	if errObj != nil {
 		return a.fail("verify", errObj)
-	}
-	var target string
-	if len(rest) > 1 {
-		return a.fail("verify", &CLIError{Code: "INPUT_REQUIRED", Message: "verify accepts at most one package id", Details: map[string]any{}})
-	}
-	if len(rest) == 1 {
-		target = normalizePackageID(rest[0])
 	}
 	lock, ok, err := a.lockfileStore().Load()
 	if err != nil {
@@ -234,7 +220,7 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 	results := make([]PackageCheckResult, 0)
 	if ok {
 		for packageID, pkg := range lock.Packages {
-			if target != "" && packageID != target {
+			if opts.PackageID != "" && packageID != opts.PackageID {
 				continue
 			}
 			findings := make([]Finding, 0)
@@ -243,7 +229,7 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 					if finding := verifyLockedAsset(asset); finding != nil {
 						findings = append(findings, *finding)
 					}
-					if activationDir != "" && asset.Active && asset.SymlinkPath != nil && filepath.Dir(*asset.SymlinkPath) != activationDir {
+					if opts.ActivationDir != "" && asset.Active && asset.SymlinkPath != nil && filepath.Dir(*asset.SymlinkPath) != opts.ActivationDir {
 						findings = append(findings, Finding{
 							Code:     "ACTIVATION_BROKEN",
 							Severity: "error",
@@ -258,8 +244,8 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 			results = append(results, PackageCheckResult{PackageID: packageID, OK: len(findings) == 0, Findings: findings})
 		}
 	}
-	if target != "" && len(results) == 0 {
-		return a.fail("verify", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+	if opts.PackageID != "" && len(results) == 0 {
+		return a.fail("verify", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 	}
 	allOK := true
 	for _, result := range results {

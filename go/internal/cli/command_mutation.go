@@ -27,14 +27,9 @@ func (a *App) runInstall(ctx context.Context, args []string) int {
 	if installErr != nil {
 		return a.fail("install", asCLIError(installErr))
 	}
-
-	if !opts.DryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: detail.VersionKey})
-		if err := a.saveLockfile(lock); err != nil {
-			return a.fail("install", asCLIError(err))
-		}
-	} else if opts.DryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: detail.VersionKey})
+	planned, err = a.finalizeLockMutation(lock, changed, opts.DryRun, planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: detail.VersionKey})
+	if err != nil {
+		return a.fail("install", asCLIError(err))
 	}
 	return a.writeInstallResult(opts.PackageID, detail.VersionKey, opts.Activate, opts.ActivationDir, changed, opts.DryRun, planned)
 }
@@ -66,71 +61,40 @@ func (a *App) runActivate(_ context.Context, args []string) int {
 	if actErr != nil {
 		return a.fail("activate", asCLIError(actErr))
 	}
-	if !opts.DryRun {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: versionKey})
-		if err := a.saveLockfile(lock); err != nil {
-			return a.fail("activate", asCLIError(err))
-		}
-	} else {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: versionKey})
+	planned, err = a.finalizeLockMutation(lock, true, opts.DryRun, planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: versionKey})
+	if err != nil {
+		return a.fail("activate", asCLIError(err))
 	}
 	return a.writeActivateResult(opts.PackageID, versionKey, opts.ActivationDir, opts.DryRun, planned)
 }
 
 func (a *App) runDeactivate(_ context.Context, args []string) int {
-	dryRun, args, errObj := extractBoolFlag(args, "--dry-run")
+	opts, errObj := parseDeactivateOptions(args)
 	if errObj != nil {
 		return a.fail("deactivate", errObj)
 	}
-	_, rest, errObj := extractStringFlag(args, "--activation-dir")
-	if errObj != nil {
-		return a.fail("deactivate", errObj)
-	}
-	if len(rest) != 1 {
-		return a.fail("deactivate", &CLIError{Code: "INPUT_REQUIRED", Message: "deactivate requires <owner>/<repo>", Details: map[string]any{}})
-	}
-	packageID := normalizePackageID(rest[0])
 	lock, err := a.loadOrInitLockfile()
 	if err != nil {
 		return a.fail("deactivate", asCLIError(err))
 	}
-	planned, changed, decErr := a.deactivatePackage(&lock, packageID, dryRun)
+	planned, changed, decErr := a.deactivatePackage(&lock, opts.PackageID, opts.DryRun)
 	if decErr != nil {
 		return a.fail("deactivate", asCLIError(decErr))
 	}
-	if changed && !dryRun {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
-		if err := a.saveLockfile(lock); err != nil {
-			return a.fail("deactivate", asCLIError(err))
-		}
-	} else if changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
+	planned, err = a.finalizeLockMutation(lock, changed, opts.DryRun, planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID})
+	if err != nil {
+		return a.fail("deactivate", asCLIError(err))
 	}
-	return a.writeDeactivateResult(packageID, changed, dryRun, planned)
+	return a.writeDeactivateResult(opts.PackageID, changed, opts.DryRun, planned)
 }
 
 func (a *App) runRepair(_ context.Context, args []string) int {
-	dryRun, args, errObj := extractBoolFlag(args, "--dry-run")
+	opts, errObj := parseRepairOptions(args)
 	if errObj != nil {
 		return a.fail("repair", errObj)
 	}
-	_, args, errObj = extractBoolFlag(args, "--yes")
-	if errObj != nil {
-		return a.fail("repair", errObj)
-	}
-	activationDir, rest, errObj := extractStringFlag(args, "--activation-dir")
-	if errObj != nil {
-		return a.fail("repair", errObj)
-	}
-	if activationDir == "" {
-		activationDir = a.Config.DefaultActivationDir
-	}
-	var target string
-	if len(rest) > 1 {
-		return a.fail("repair", &CLIError{Code: "INPUT_REQUIRED", Message: "repair accepts at most one package id", Details: map[string]any{}})
-	}
-	if len(rest) == 1 {
-		target = normalizePackageID(rest[0])
+	if opts.ActivationDir == "" {
+		opts.ActivationDir = a.Config.DefaultActivationDir
 	}
 	lock, ok, err := a.lockfileStore().Load()
 	if err != nil {
@@ -143,7 +107,7 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 	planned := make([]PlannedAction, 0)
 	changed := false
 	for packageID, pkg := range lock.Packages {
-		if target != "" && packageID != target {
+		if opts.PackageID != "" && packageID != opts.PackageID {
 			continue
 		}
 		activeVersions := versionKeysWithActiveAssets(pkg)
@@ -174,19 +138,19 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 				expectedActive := chosenActive != "" && versionKey == chosenActive
 				linkPath := ""
 				if expectedActive {
-					if activationDir == "" {
+					if opts.ActivationDir == "" {
 						findings = append(findings, Finding{Code: "INPUT_REQUIRED", Severity: "error", Subject: "activation", Message: "activation directory is required to repair active assets", Details: map[string]any{"package_id": packageID}})
 						continue
 					}
 					if version.Assets[i].SymlinkPath != nil && *version.Assets[i].SymlinkPath != "" {
 						linkPath = *version.Assets[i].SymlinkPath
 					} else {
-						linkPath = a.resolveSymlinkPath(activationDir, packageID, version.Assets[i])
+						linkPath = a.resolveSymlinkPath(opts.ActivationDir, packageID, version.Assets[i])
 					}
 					if version.Assets[i].SymlinkPath == nil || *version.Assets[i].SymlinkPath != linkPath || !version.Assets[i].Active || activationBroken {
 						planned = append(planned, PlannedAction{Type: "create_symlink", PackageID: packageID, VersionKey: versionKey, Path: version.Assets[i].Path})
 						changed = true
-						if !dryRun {
+						if !opts.DryRun {
 							if err := atomicSymlink(version.Assets[i].LocalPath, linkPath); err != nil {
 								return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "could not repair symlink", Details: map[string]any{"path": linkPath, "reason": err.Error()}})
 							}
@@ -198,7 +162,7 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 					if version.Assets[i].SymlinkPath != nil {
 						planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: packageID, VersionKey: versionKey, Path: version.Assets[i].Path})
 						changed = true
-						if !dryRun {
+						if !opts.DryRun {
 							if err := removeFileIfExists(*version.Assets[i].SymlinkPath); err != nil {
 								return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "could not remove stale symlink", Details: map[string]any{"path": *version.Assets[i].SymlinkPath, "reason": err.Error()}})
 							}
@@ -221,8 +185,8 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 		sortFindings(findings)
 		results = append(results, PackageCheckResult{PackageID: packageID, OK: len(findings) == 0, Findings: findings})
 	}
-	if target != "" && len(results) == 0 {
-		return a.fail("repair", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+	if opts.PackageID != "" && len(results) == 0 {
+		return a.fail("repair", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 	}
 	allOK := true
 	repaired := make([]any, 0)
@@ -235,16 +199,12 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 	if !allOK {
 		return a.writePackageFailure("repair", "repair failed", results)
 	}
-	if !dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: target})
-		if err := a.saveLockfile(lock); err != nil {
-			return a.fail("repair", asCLIError(err))
-		}
-	} else if dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: target})
+	planned, err = a.finalizeLockMutation(lock, changed, opts.DryRun, planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID})
+	if err != nil {
+		return a.fail("repair", asCLIError(err))
 	}
 	data := map[string]any{"changed": changed, "repaired_packages": repaired}
-	if dryRun {
+	if opts.DryRun {
 		data["planned_actions"] = plannedActionsToAny(planned)
 	}
 	if a.JSON {
@@ -273,51 +233,31 @@ func (a *App) runRepair(_ context.Context, args []string) int {
 	}
 	fmt.Fprintf(a.Stdout, "  symlinks created: %d\n", plannedActionCount(planned, "create_symlink"))
 	fmt.Fprintf(a.Stdout, "  symlinks removed: %d\n", plannedActionCount(planned, "remove_symlink"))
-	if dryRun && len(planned) > 0 {
+	if opts.DryRun && len(planned) > 0 {
 		printPlannedActions(a.Stdout, planned)
 	}
 	return 0
 }
 
 func (a *App) runUninstall(_ context.Context, args []string) int {
-	dryRun, args, errObj := extractBoolFlag(args, "--dry-run")
+	opts, errObj := parseUninstallOptions(args)
 	if errObj != nil {
 		return a.fail("uninstall", errObj)
 	}
-	_, args, errObj = extractBoolFlag(args, "--yes")
-	if errObj != nil {
-		return a.fail("uninstall", errObj)
-	}
-	allVersions, args, errObj := extractBoolFlag(args, "--all")
-	if errObj != nil {
-		return a.fail("uninstall", errObj)
-	}
-	_, args, errObj = extractStringFlag(args, "--activation-dir")
-	if errObj != nil {
-		return a.fail("uninstall", errObj)
-	}
-	version, rest, errObj := extractStringFlag(args, "--version")
-	if errObj != nil {
-		return a.fail("uninstall", errObj)
-	}
-	if len(rest) != 1 {
-		return a.fail("uninstall", &CLIError{Code: "INPUT_REQUIRED", Message: "uninstall requires <owner>/<repo>", Details: map[string]any{}})
-	}
-	packageID := normalizePackageID(rest[0])
 	lock, err := a.loadOrInitLockfile()
 	if err != nil {
 		return a.fail("uninstall", asCLIError(err))
 	}
-	pkg, ok := lock.Packages[packageID]
+	pkg, ok := lock.Packages[opts.PackageID]
 	if !ok {
-		return a.fail("uninstall", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": packageID}})
+		return a.fail("uninstall", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 	}
 	targetVersions := make([]string, 0)
 	switch {
-	case allVersions:
+	case opts.All:
 		targetVersions = SortedInstalledVersionKeys(pkg)
-	case version != "":
-		versionKey, chooseErr := chooseInstalledVersion(pkg, version)
+	case opts.Version != "":
+		versionKey, chooseErr := chooseInstalledVersion(pkg, opts.Version)
 		if chooseErr != nil {
 			return a.fail("uninstall", chooseErr)
 		}
@@ -327,7 +267,7 @@ func (a *App) runUninstall(_ context.Context, args []string) int {
 		if len(keys) == 1 {
 			targetVersions = append(targetVersions, keys[0])
 		} else {
-			return a.fail("uninstall", &CLIError{Code: "MULTIPLE_VERSIONS_INSTALLED", Message: "multiple installed versions require --version or --all", Details: map[string]any{"package_id": packageID}})
+			return a.fail("uninstall", &CLIError{Code: "MULTIPLE_VERSIONS_INSTALLED", Message: "multiple installed versions require --version or --all", Details: map[string]any{"package_id": opts.PackageID}})
 		}
 	}
 	planned := make([]PlannedAction, 0)
@@ -336,74 +276,55 @@ func (a *App) runUninstall(_ context.Context, args []string) int {
 		version := pkg.InstalledVersions[versionKey]
 		for _, asset := range version.Assets {
 			if asset.SymlinkPath != nil {
-				planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: packageID, VersionKey: versionKey, Path: asset.Path})
-				if !dryRun {
+				planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: opts.PackageID, VersionKey: versionKey, Path: asset.Path})
+				if !opts.DryRun {
 					if err := removeFileIfExists(*asset.SymlinkPath); err != nil {
 						return a.fail("uninstall", &CLIError{Code: "INTERNAL_ERROR", Message: "could not remove activation symlink", Details: map[string]any{"path": *asset.SymlinkPath, "reason": err.Error()}})
 					}
 				}
 			}
-			planned = append(planned, PlannedAction{Type: "remove_asset", PackageID: packageID, VersionKey: versionKey, Path: asset.Path})
-			if !dryRun {
+			planned = append(planned, PlannedAction{Type: "remove_asset", PackageID: opts.PackageID, VersionKey: versionKey, Path: asset.Path})
+			if !opts.DryRun {
 				if err := removeFileIfExists(asset.LocalPath); err != nil {
 					return a.fail("uninstall", &CLIError{Code: "INTERNAL_ERROR", Message: "could not remove installed asset", Details: map[string]any{"path": asset.LocalPath, "reason": err.Error()}})
 				}
 			}
 		}
-		planned = append(planned, PlannedAction{Type: "remove_lockfile_entry", PackageID: packageID, VersionKey: versionKey})
+		planned = append(planned, PlannedAction{Type: "remove_lockfile_entry", PackageID: opts.PackageID, VersionKey: versionKey})
 		delete(pkg.InstalledVersions, versionKey)
 		changed = true
 	}
 	if len(pkg.InstalledVersions) == 0 {
-		delete(lock.Packages, packageID)
+		delete(lock.Packages, opts.PackageID)
 	} else {
 		pkg.ActiveVersionKey = nil
-		lock.Packages[packageID] = pkg
+		lock.Packages[opts.PackageID] = pkg
 	}
-	if !dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
-		if err := a.saveLockfile(lock); err != nil {
-			return a.fail("uninstall", asCLIError(err))
-		}
-	} else if dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID})
+	planned, err = a.finalizeLockMutation(lock, changed, opts.DryRun, planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID})
+	if err != nil {
+		return a.fail("uninstall", asCLIError(err))
 	}
-	return a.writeUninstallResult(packageID, targetVersions, changed, dryRun, planned)
+	return a.writeUninstallResult(opts.PackageID, targetVersions, changed, opts.DryRun, planned)
 }
 
 func (a *App) runUpdate(ctx context.Context, args []string) int {
-	dryRun, args, errObj := extractBoolFlag(args, "--dry-run")
+	opts, errObj := parseUpdateOptions(args)
 	if errObj != nil {
 		return a.fail("update", errObj)
-	}
-	activate, args, errObj := extractBoolFlag(args, "--activate")
-	if errObj != nil {
-		return a.fail("update", errObj)
-	}
-	activationDir, rest, errObj := extractStringFlag(args, "--activation-dir")
-	if errObj != nil {
-		return a.fail("update", errObj)
-	}
-	var target string
-	if len(rest) > 1 {
-		return a.fail("update", &CLIError{Code: "INPUT_REQUIRED", Message: "update accepts at most one package id", Details: map[string]any{}})
-	}
-	if len(rest) == 1 {
-		target = normalizePackageID(rest[0])
 	}
 	lock, ok, err := a.lockfileStore().Load()
 	if err != nil {
 		return a.fail("update", asCLIError(err))
 	}
 	if !ok || len(lock.Packages) == 0 {
-		if target != "" {
-			return a.fail("update", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+		if opts.PackageID != "" {
+			return a.fail("update", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 		}
 		if !a.JSON {
 			printNoInstalledPackages(a.Stdout)
 			return 0
 		}
-		return a.writeUpdateResult(target, false, activate, dryRun, activationDir, nil)
+		return a.writeUpdateResult(opts.PackageID, false, opts.Activate, opts.DryRun, opts.ActivationDir, nil)
 	}
 	root, err := a.Client.GetRootIndex(ctx)
 	if err != nil {
@@ -413,14 +334,14 @@ func (a *App) runUpdate(ctx context.Context, args []string) int {
 	changed := false
 	packageIDs := make([]string, 0, len(lock.Packages))
 	for packageID := range lock.Packages {
-		if target != "" && packageID != target {
+		if opts.PackageID != "" && packageID != opts.PackageID {
 			continue
 		}
 		packageIDs = append(packageIDs, packageID)
 	}
 	sort.Strings(packageIDs)
-	if target != "" && len(packageIDs) == 0 {
-		return a.fail("update", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": target}})
+	if opts.PackageID != "" && len(packageIDs) == 0 {
+		return a.fail("update", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 	}
 	for _, packageID := range packageIDs {
 		rootPkg, ok := root.Packages[packageID]
@@ -436,7 +357,7 @@ func (a *App) runUpdate(ctx context.Context, args []string) int {
 		if err != nil {
 			return a.fail("update", asCLIError(err))
 		}
-		ch, actions, installErr := a.installDetail(ctx, &lock, detail, activate, activationDir, dryRun)
+		ch, actions, installErr := a.installDetail(ctx, &lock, detail, opts.Activate, opts.ActivationDir, opts.DryRun)
 		if installErr != nil {
 			return a.fail("update", asCLIError(installErr))
 		}
@@ -445,13 +366,9 @@ func (a *App) runUpdate(ctx context.Context, args []string) int {
 			changed = true
 		}
 	}
-	if !dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: target})
-		if err := a.saveLockfile(lock); err != nil {
-			return a.fail("update", asCLIError(err))
-		}
-	} else if dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: target})
+	planned, err = a.finalizeLockMutation(lock, changed, opts.DryRun, planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID})
+	if err != nil {
+		return a.fail("update", asCLIError(err))
 	}
-	return a.writeUpdateResult(target, changed, activate, dryRun, activationDir, planned)
+	return a.writeUpdateResult(opts.PackageID, changed, opts.Activate, opts.DryRun, opts.ActivationDir, planned)
 }

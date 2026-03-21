@@ -74,6 +74,20 @@ func cloneLockfile(lock protocol.Lockfile) protocol.Lockfile {
 	return out
 }
 
+func (a *App) finalizeLockMutation(lock protocol.Lockfile, changed, dryRun bool, planned []PlannedAction, writeAction PlannedAction) ([]PlannedAction, error) {
+	if !changed {
+		return planned, nil
+	}
+	planned = append(planned, writeAction)
+	if dryRun {
+		return planned, nil
+	}
+	if err := a.saveLockfile(lock); err != nil {
+		return nil, err
+	}
+	return planned, nil
+}
+
 func packageResultsToDetails(results []PackageCheckResult) map[string]any {
 	items := make([]any, 0, len(results))
 	for _, result := range results {
