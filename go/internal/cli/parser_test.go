@@ -51,3 +51,35 @@ func TestParseActivateOptionsAcceptsFlagsInAnyOrder(t *testing.T) {
 		t.Fatalf("unexpected options: %#v", opts)
 	}
 }
+
+func TestParsePackageInitOptionsAcceptsFlagsInAnyOrder(t *testing.T) {
+	root := t.TempDir()
+	opts, err := parsePackageInitOptions([]string{"--write", root, "--yes", "--dry-run"})
+	if err != nil {
+		t.Fatalf("parsePackageInitOptions: %v", err)
+	}
+	if opts.Root != root || !opts.WriteFile || !opts.Yes || !opts.DryRun {
+		t.Fatalf("unexpected options: %#v", opts)
+	}
+}
+
+func TestParsePackagePreviewOptionsSupportsEqualsSyntax(t *testing.T) {
+	root := t.TempDir()
+	opts, err := parsePackagePreviewOptions([]string{"--package-id=Example/Family", root})
+	if err != nil {
+		t.Fatalf("parsePackagePreviewOptions: %v", err)
+	}
+	if opts.Root != root || opts.PackageID != "Example/Family" {
+		t.Fatalf("unexpected options: %#v", opts)
+	}
+}
+
+func TestParseWorkflowInitOptionsRejectsUnknownFlag(t *testing.T) {
+	_, err := parseWorkflowInitOptions([]string{"--bogus"})
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if err.Code != "INPUT_REQUIRED" || err.Message != "unknown flag" {
+		t.Fatalf("unexpected error: %#v", err)
+	}
+}

@@ -225,6 +225,77 @@ func readManifestAtRoot(root string) (protocol.Manifest, error) {
 	return manifest, nil
 }
 
+func validateManifestRoot(root string) (protocol.Manifest, error) {
+	manifest, err := readManifestAtRoot(root)
+	if err != nil {
+		return protocol.Manifest{}, err
+	}
+	if err := protocol.ValidateManifest(manifest); err != nil {
+		return protocol.Manifest{}, protocolErrorToCLI(err)
+	}
+	for _, file := range manifest.Files {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(file.Path))); err != nil {
+			return protocol.Manifest{}, &CLIError{Code: "LOCAL_FILE_MISSING", Message: "declared manifest file is missing", Details: map[string]any{"path": file.Path}}
+		}
+	}
+	return manifest, nil
+}
+
+func checkManifestTagMatches(manifest protocol.Manifest, tag string) error {
+	if tag == "" {
+		return nil
+	}
+	tagKey, err := protocol.NormalizeVersionKey(tag)
+	if err != nil {
+		return protocolErrorToCLI(err)
+	}
+	versionKey, err := protocol.NormalizeVersionKey(manifest.Version)
+	if err != nil {
+		return protocolErrorToCLI(err)
+	}
+	if tagKey != versionKey {
+		return &CLIError{Code: "TAG_VERSION_MISMATCH", Message: "tag version does not match manifest version", Details: map[string]any{"tag": tag, "manifest_version": manifest.Version}}
+	}
+	return nil
+}
+
+func writeTrackedFile(target string, body []byte, actionType, objectName string, dryRun, yes bool) ([]PlannedAction, error) {
+	planned := []PlannedAction{{Type: actionType, Path: target}}
+	if _, err := os.Stat(target); err == nil {
+		if !yes {
+			return nil, &CLIError{
+				Code:    "INPUT_REQUIRED",
+				Message: fmt.Sprintf("refusing to overwrite existing %s without --yes", objectName),
+				Details: map[string]any{"path": target},
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, &CLIError{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("could not inspect existing %s", objectName),
+			Details: map[string]any{"path": target, "reason": err.Error()},
+		}
+	}
+	if dryRun {
+		return planned, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return nil, &CLIError{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("could not create %s directory", objectName),
+			Details: map[string]any{"path": target, "reason": err.Error()},
+		}
+	}
+	if err := os.WriteFile(target, body, 0o644); err != nil {
+		return nil, &CLIError{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("could not write %s", objectName),
+			Details: map[string]any{"path": target, "reason": err.Error()},
+		}
+	}
+	return planned, nil
+}
+
 func oneOptionalPath(args []string) (string, *CLIError) {
 	if len(args) > 1 {
 		return "", &CLIError{Code: "INPUT_REQUIRED", Message: "too many positional arguments", Details: map[string]any{}}

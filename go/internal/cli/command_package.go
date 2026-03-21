@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
@@ -30,24 +29,12 @@ func (a *App) runPackage(ctx context.Context, args []string) int {
 }
 
 func (a *App) runPackageInit(_ context.Context, args []string) int {
-	dryRun, args, errObj := extractBoolFlag(args, "--dry-run")
-	if errObj != nil {
-		return a.fail("package init", errObj)
-	}
-	writeFile, args, errObj := extractBoolFlag(args, "--write")
-	if errObj != nil {
-		return a.fail("package init", errObj)
-	}
-	yes, args, errObj := extractBoolFlag(args, "--yes")
-	if errObj != nil {
-		return a.fail("package init", errObj)
-	}
-	root, errObj := oneOptionalPath(args)
+	opts, errObj := parsePackageInitOptions(args)
 	if errObj != nil {
 		return a.fail("package init", errObj)
 	}
 
-	manifest, assets, inferences, conflicts, unresolved, err := a.buildCandidateManifest(root)
+	manifest, assets, inferences, conflicts, unresolved, err := a.buildCandidateManifest(opts.Root)
 	if err != nil {
 		return a.fail("package init", asCLIError(err))
 	}
@@ -69,7 +56,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 	}
 
 	if !a.JSON {
-		printPackageInitSummary(a.Stdout, root, manifest, assets, inferences, conflicts, unresolved)
+		printPackageInitSummary(a.Stdout, opts.Root, manifest, assets, inferences, conflicts, unresolved)
 	}
 
 	data := map[string]any{
@@ -78,20 +65,15 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		"conflicts":         conflictRecordsToAny(conflicts),
 		"unresolved_fields": stringSliceToAny(unresolved),
 	}
-	if writeFile {
-		target := filepath.Join(root, "fontpub.json")
-		planned := []PlannedAction{{Type: "write_manifest", Path: target}}
-		if _, err := os.Stat(target); err == nil && !yes {
-			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "refusing to overwrite existing fontpub.json without --yes", Details: map[string]any{"path": target}})
-		}
+	if opts.WriteFile {
+		target := filepath.Join(opts.Root, "fontpub.json")
 		body, err := protocol.MarshalCanonical(manifest)
 		if err != nil {
 			return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "could not serialize manifest", Details: map[string]any{"reason": err.Error()}})
 		}
-		if !dryRun {
-			if err := os.WriteFile(target, append(body, '\n'), 0o644); err != nil {
-				return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "could not write manifest", Details: map[string]any{"path": target, "reason": err.Error()}})
-			}
+		planned, err := writeTrackedFile(target, append(body, '\n'), "write_manifest", "fontpub.json", opts.DryRun, opts.Yes)
+		if err != nil {
+			return a.fail("package init", asCLIError(err))
 		}
 		if a.JSON {
 			env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package init", Data: data}
@@ -100,7 +82,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 			}
 			return a.writeJSON(env)
 		}
-		if dryRun {
+		if opts.DryRun {
 			fmt.Fprintln(a.Stdout, "Manifest write plan")
 			fmt.Fprintf(a.Stdout, "  path: %s\n", target)
 			fmt.Fprintf(a.Stdout, "  files discovered: %d\n", len(manifest.Files))
@@ -131,45 +113,33 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 }
 
 func (a *App) runPackageValidate(_ context.Context, args []string) int {
-	root, errObj := oneOptionalPath(args)
+	opts, errObj := parsePackageValidateOptions(args)
 	if errObj != nil {
 		return a.fail("package validate", errObj)
 	}
-	manifest, err := readManifestAtRoot(root)
+	manifest, err := validateManifestRoot(opts.Root)
 	if err != nil {
 		return a.fail("package validate", asCLIError(err))
 	}
-	if err := protocol.ValidateManifest(manifest); err != nil {
-		return a.fail("package validate", protocolErrorToCLI(err))
-	}
-	for _, file := range manifest.Files {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(file.Path))); err != nil {
-			return a.fail("package validate", &CLIError{Code: "LOCAL_FILE_MISSING", Message: "declared manifest file is missing", Details: map[string]any{"path": file.Path}})
-		}
-	}
 	data := map[string]any{
 		"manifest":   mustMap(manifest),
-		"root_path":  root,
+		"root_path":  opts.Root,
 		"validated":  true,
 		"file_count": len(manifest.Files),
 	}
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package validate", Data: data})
 	}
-	printPackageValidateSummary(a.Stdout, root, manifest)
+	printPackageValidateSummary(a.Stdout, opts.Root, manifest)
 	return 0
 }
 
 func (a *App) runPackagePreview(_ context.Context, args []string) int {
-	packageID, args, errObj := extractStringFlag(args, "--package-id")
+	opts, errObj := parsePackagePreviewOptions(args)
 	if errObj != nil {
 		return a.fail("package preview", errObj)
 	}
-	root, errObj := oneOptionalPath(args)
-	if errObj != nil {
-		return a.fail("package preview", errObj)
-	}
-	candidate, err := a.buildCandidatePackageDetail(root, packageID)
+	candidate, err := a.buildCandidatePackageDetail(opts.Root, opts.PackageID)
 	if err != nil {
 		return a.fail("package preview", asCLIError(err))
 	}
@@ -202,49 +172,27 @@ func (a *App) runPackageInspect(_ context.Context, args []string) int {
 }
 
 func (a *App) runPackageCheck(_ context.Context, args []string) int {
-	tag, args, errObj := extractStringFlag(args, "--tag")
+	opts, errObj := parsePackageCheckOptions(args)
 	if errObj != nil {
 		return a.fail("package check", errObj)
 	}
-	root, errObj := oneOptionalPath(args)
-	if errObj != nil {
-		return a.fail("package check", errObj)
-	}
-	manifest, err := readManifestAtRoot(root)
+	manifest, err := validateManifestRoot(opts.Root)
 	if err != nil {
 		return a.fail("package check", asCLIError(err))
 	}
-	if err := protocol.ValidateManifest(manifest); err != nil {
-		return a.fail("package check", protocolErrorToCLI(err))
-	}
-	for _, file := range manifest.Files {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(file.Path))); err != nil {
-			return a.fail("package check", &CLIError{Code: "LOCAL_FILE_MISSING", Message: "declared manifest file is missing", Details: map[string]any{"path": file.Path}})
-		}
-	}
-	if tag != "" {
-		tagKey, err := protocol.NormalizeVersionKey(tag)
-		if err != nil {
-			return a.fail("package check", protocolErrorToCLI(err))
-		}
-		versionKey, err := protocol.NormalizeVersionKey(manifest.Version)
-		if err != nil {
-			return a.fail("package check", protocolErrorToCLI(err))
-		}
-		if tagKey != versionKey {
-			return a.fail("package check", &CLIError{Code: "TAG_VERSION_MISMATCH", Message: "tag version does not match manifest version", Details: map[string]any{"tag": tag, "manifest_version": manifest.Version}})
-		}
+	if err := checkManifestTagMatches(manifest, opts.Tag); err != nil {
+		return a.fail("package check", asCLIError(err))
 	}
 	data := map[string]any{
-		"root_path": root,
+		"root_path": opts.Root,
 		"ready":     true,
 	}
-	if tag != "" {
-		data["tag"] = tag
+	if opts.Tag != "" {
+		data["tag"] = opts.Tag
 	}
 	if a.JSON {
 		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package check", Data: data})
 	}
-	printPackageCheckSummary(a.Stdout, root, manifest, tag)
+	printPackageCheckSummary(a.Stdout, opts.Root, manifest, opts.Tag)
 	return 0
 }

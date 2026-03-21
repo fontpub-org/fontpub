@@ -1,79 +1,92 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
 
-func TestInferFromFilenameNormalizesWOFF2FamilyName(t *testing.T) {
-	tests := []struct {
-		path       string
-		wantStyle  string
-		wantWeight int
-		wantName   string
-	}{
-		{
-			path:       "fonts/static/ZxGamut-Regular.woff2",
-			wantStyle:  "normal",
-			wantWeight: 400,
-			wantName:   "Zx Gamut",
-		},
-		{
-			path:       "fonts/static/ZxGamut-SemiBold.woff2",
-			wantStyle:  "normal",
-			wantWeight: 600,
-			wantName:   "Zx Gamut",
-		},
-		{
-			path:       "fonts/variable/ZxGamut[wght].woff2",
-			wantStyle:  "normal",
-			wantWeight: 400,
-			wantName:   "Zx Gamut",
-		},
-		{
-			path:       "fonts/0xProto-Regular.woff2",
-			wantStyle:  "normal",
-			wantWeight: 400,
-			wantName:   "0xProto",
-		},
+	"github.com/fontpub-org/fontpub/go/internal/protocol"
+)
+
+func TestValidateManifestRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "dist"), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dist", "ExampleSans-Regular.otf"), []byte("font"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile font: %v", err)
+	}
+	manifest := protocol.Manifest{
+		Name:    "Example Sans",
+		Author:  "Example Studio",
+		Version: "1.2.3",
+		License: "OFL-1.1",
+		Files:   []protocol.ManifestFile{{Path: "dist/ExampleSans-Regular.otf", Style: "normal", Weight: 400}},
+	}
+	body, _ := protocol.MarshalCanonical(manifest)
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.path, func(t *testing.T) {
-			style, weight, name := inferFromFilename(tc.path)
-			if style != tc.wantStyle || weight != tc.wantWeight || name != tc.wantName {
-				t.Fatalf("inferFromFilename(%q)=(%q,%d,%q) want (%q,%d,%q)", tc.path, style, weight, name, tc.wantStyle, tc.wantWeight, tc.wantName)
-			}
-		})
+	got, err := validateManifestRoot(root)
+	if err != nil {
+		t.Fatalf("validateManifestRoot: %v", err)
+	}
+	if got.Name != manifest.Name || got.Version != manifest.Version || len(got.Files) != 1 {
+		t.Fatalf("unexpected manifest: %#v", got)
 	}
 }
 
-func TestApplyStemGroupingPrefersEmbeddedMetadataAcrossFormats(t *testing.T) {
-	assets := []inspection{
-		{
-			Path:         "fonts/0xProto-Regular.otf",
-			Format:       "otf",
-			Style:        "normal",
-			Weight:       400,
-			Name:         "0x Proto",
-			styleSource:  "embedded_metadata",
-			weightSource: "embedded_metadata",
-			nameSource:   "embedded_metadata",
-		},
-		{
-			Path:         "fonts/0xProto-Regular.woff2",
-			Format:       "woff2",
-			Style:        "normal",
-			Weight:       400,
-			Name:         "0xProto",
-			styleSource:  "filename_heuristic",
-			weightSource: "filename_heuristic",
-			nameSource:   "filename_heuristic",
-		},
+func TestValidateManifestRootRejectsMissingDeclaredFile(t *testing.T) {
+	root := t.TempDir()
+	manifest := protocol.Manifest{
+		Name:    "Example Sans",
+		Author:  "Example Studio",
+		Version: "1.2.3",
+		License: "OFL-1.1",
+		Files:   []protocol.ManifestFile{{Path: "dist/ExampleSans-Regular.otf", Style: "normal", Weight: 400}},
+	}
+	body, _ := protocol.MarshalCanonical(manifest)
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile manifest: %v", err)
 	}
 
-	grouped := applyStemGrouping(assets)
-	if grouped[1].Name != "0x Proto" {
-		t.Fatalf("unexpected grouped name: %q", grouped[1].Name)
+	_, err := validateManifestRoot(root)
+	if err == nil {
+		t.Fatalf("expected error")
 	}
-	if grouped[1].nameSource != "group_embedded_metadata" {
-		t.Fatalf("unexpected grouped source: %q", grouped[1].nameSource)
+	cliErr := asCLIError(err)
+	if cliErr.Code != "LOCAL_FILE_MISSING" || cliErr.Details["path"] != "dist/ExampleSans-Regular.otf" {
+		t.Fatalf("unexpected error: %#v", cliErr)
+	}
+}
+
+func TestCheckManifestTagMatches(t *testing.T) {
+	manifest := protocol.Manifest{Version: "1.2.3"}
+	if err := checkManifestTagMatches(manifest, "v1.2.3"); err != nil {
+		t.Fatalf("checkManifestTagMatches: %v", err)
+	}
+	err := checkManifestTagMatches(manifest, "v2.0.0")
+	if err == nil {
+		t.Fatalf("expected mismatch")
+	}
+	cliErr := asCLIError(err)
+	if cliErr.Code != "TAG_VERSION_MISMATCH" {
+		t.Fatalf("unexpected error: %#v", cliErr)
+	}
+}
+
+func TestWriteTrackedFileDryRun(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, ".github", "workflows", "fontpub.yml")
+	planned, err := writeTrackedFile(target, []byte("body"), "write_workflow", "workflow", true, false)
+	if err != nil {
+		t.Fatalf("writeTrackedFile: %v", err)
+	}
+	if len(planned) != 1 || planned[0].Type != "write_workflow" || planned[0].Path != target {
+		t.Fatalf("unexpected planned actions: %#v", planned)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("expected no file, got err=%v", err)
 	}
 }

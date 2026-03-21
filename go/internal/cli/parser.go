@@ -261,3 +261,105 @@ func parseUpdateOptions(args []string) (updateOptions, *CLIError) {
 	}
 	return opts, nil
 }
+
+type packageInitOptions struct {
+	Root      string
+	DryRun    bool
+	WriteFile bool
+	Yes       bool
+}
+
+func parsePackageInitOptions(args []string) (packageInitOptions, *CLIError) {
+	parsed, err := parseArgs(args, []string{"--dry-run", "--write", "--yes"}, nil)
+	if err != nil {
+		return packageInitOptions{}, err
+	}
+	root, errObj := oneOptionalPath(parsed.positionals)
+	if errObj != nil {
+		return packageInitOptions{}, errObj
+	}
+	return packageInitOptions{
+		Root:      root,
+		DryRun:    parsed.boolValue("--dry-run"),
+		WriteFile: parsed.boolValue("--write"),
+		Yes:       parsed.boolValue("--yes"),
+	}, nil
+}
+
+type packageValidateOptions struct {
+	Root string
+}
+
+func parsePackageValidateOptions(args []string) (packageValidateOptions, *CLIError) {
+	parsed, err := parseArgs(args, nil, nil)
+	if err != nil {
+		return packageValidateOptions{}, err
+	}
+	root, errObj := oneOptionalPath(parsed.positionals)
+	if errObj != nil {
+		return packageValidateOptions{}, errObj
+	}
+	return packageValidateOptions{Root: root}, nil
+}
+
+type packagePreviewOptions struct {
+	Root      string
+	PackageID string
+}
+
+func parsePackagePreviewOptions(args []string) (packagePreviewOptions, *CLIError) {
+	parsed, err := parseArgs(args, nil, []string{"--package-id"})
+	if err != nil {
+		return packagePreviewOptions{}, err
+	}
+	root, errObj := oneOptionalPath(parsed.positionals)
+	if errObj != nil {
+		return packagePreviewOptions{}, errObj
+	}
+	return packagePreviewOptions{
+		Root:      root,
+		PackageID: parsed.stringValue("--package-id"),
+	}, nil
+}
+
+type packageCheckOptions struct {
+	Root string
+	Tag  string
+}
+
+func parsePackageCheckOptions(args []string) (packageCheckOptions, *CLIError) {
+	parsed, err := parseArgs(args, nil, []string{"--tag"})
+	if err != nil {
+		return packageCheckOptions{}, err
+	}
+	root, errObj := oneOptionalPath(parsed.positionals)
+	if errObj != nil {
+		return packageCheckOptions{}, errObj
+	}
+	return packageCheckOptions{
+		Root: root,
+		Tag:  parsed.stringValue("--tag"),
+	}, nil
+}
+
+type workflowInitOptions struct {
+	Root   string
+	DryRun bool
+	Yes    bool
+}
+
+func parseWorkflowInitOptions(args []string) (workflowInitOptions, *CLIError) {
+	parsed, err := parseArgs(args, []string{"--dry-run", "--yes"}, nil)
+	if err != nil {
+		return workflowInitOptions{}, err
+	}
+	root, errObj := oneOptionalPath(parsed.positionals)
+	if errObj != nil {
+		return workflowInitOptions{}, errObj
+	}
+	return workflowInitOptions{
+		Root:   root,
+		DryRun: parsed.boolValue("--dry-run"),
+		Yes:    parsed.boolValue("--yes"),
+	}, nil
+}
