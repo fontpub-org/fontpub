@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -161,6 +162,39 @@ func TestRunLSRemoteHumanReadableEmptyState(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("ls-remote empty-state output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestRunLSRemoteNetworkFailureSuggestsConnectivity(t *testing.T) {
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return nil, errors.New("dial tcp: i/o timeout")
+			}),
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"ls-remote"}); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INTERNAL_ERROR: request failed\n",
+		"  path: /v1/index.json\n",
+		"Next:\n",
+		"  check FONTPUB_BASE_URL or network connectivity\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
 		}
 	}
 }
@@ -901,6 +935,58 @@ func TestInstallHumanReadableSummaries(t *testing.T) {
 	}
 	if got := stdout.String(); !strings.Contains(got, "example/family@1.2.3 is already installed\n") {
 		t.Fatalf("unexpected no-change output:\n%s", got)
+	}
+}
+
+func TestInstallDownloadFailureSuggestsConnectivity(t *testing.T) {
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch req.URL.Path {
+				case "/v1/packages/example/family.json":
+					return jsonResponse(http.StatusOK, protocol.VersionedPackageDetail{
+						SchemaVersion: "1",
+						PackageID:     "example/family",
+						DisplayName:   "Example Sans",
+						Author:        "Example Studio",
+						License:       "OFL-1.1",
+						Version:       "1.2.3",
+						VersionKey:    "1.2.3",
+						PublishedAt:   "2026-01-02T00:00:00Z",
+						GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "0123456789abcdef0123456789abcdef01234567"},
+						ManifestURL:   "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+						Assets: []protocol.VersionedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", URL: "https://assets.example/regular.otf", SHA256: strings.Repeat("a", 64), Format: "otf", Style: "normal", Weight: 400, SizeBytes: 11},
+						},
+					}), nil
+				default:
+					return nil, errors.New("dial tcp: i/o timeout")
+				}
+			}),
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: t.TempDir()},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"install", "example/family"}); code == 0 {
+		t.Fatalf("expected failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INTERNAL_ERROR: download failed\n",
+		"  url: https://assets.example/regular.otf\n",
+		"Next:\n",
+		"  check FONTPUB_BASE_URL or network connectivity\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
 	}
 }
 
