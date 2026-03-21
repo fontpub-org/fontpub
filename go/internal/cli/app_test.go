@@ -1445,6 +1445,135 @@ func TestActivateWithoutVersionFailsWhenInstalledVersionsAreAmbiguous(t *testing
 	}
 }
 
+func TestActivateReusesExistingMatchingSymlinkPath(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(localPath, []byte("font-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	existingSymlink := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(localPath, existingSymlink); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:      "dist/ExampleSans-Regular.otf",
+							SHA256:    strings.Repeat("c", 64),
+							LocalPath: localPath,
+						}},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: activationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"activate", "example/family", "--json"}); code != 0 {
+		t.Fatalf("activate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	got := saved.Packages["example/family"].InstalledVersions["1.2.3"].Assets[0].SymlinkPath
+	if got == nil || *got != existingSymlink {
+		t.Fatalf("expected existing symlink path to be reused, got %#v", got)
+	}
+}
+
+func TestActivateUsesHashedSymlinkNameWhenDefaultPathConflicts(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	wrongTarget := filepath.Join(stateDir, "other", "ExampleSans-Regular.otf")
+	for _, path := range []string{localPath, wrongTarget} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("os.MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("font-bytes"), 0o644); err != nil {
+			t.Fatalf("os.WriteFile: %v", err)
+		}
+	}
+	conflictingPath := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(wrongTarget, conflictingPath); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:      "dist/ExampleSans-Regular.otf",
+							SHA256:    strings.Repeat("d", 64),
+							LocalPath: localPath,
+						}},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: activationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"activate", "example/family", "--json"}); code != 0 {
+		t.Fatalf("activate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	got := saved.Packages["example/family"].InstalledVersions["1.2.3"].Assets[0].SymlinkPath
+	want := filepath.Join(activationDir, "example--family--ExampleSans-Regular.otf--dddddddd")
+	if got == nil || *got != want {
+		t.Fatalf("expected hashed symlink path %q, got %#v", want, got)
+	}
+	target, err := os.Readlink(want)
+	if err != nil {
+		t.Fatalf("os.Readlink: %v", err)
+	}
+	if filepath.Clean(target) != filepath.Clean(localPath) {
+		t.Fatalf("unexpected symlink target: %q", target)
+	}
+}
+
 func TestVerifyHumanReadableSuccess(t *testing.T) {
 	stateDir := t.TempDir()
 	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
