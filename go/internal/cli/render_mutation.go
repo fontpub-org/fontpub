@@ -199,11 +199,7 @@ func (a *App) writeRepairResult(results []PackageCheckResult, repaired []any, ch
 		data["planned_actions"] = plannedActionsToAny(planned)
 	}
 	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "repair", Data: data}
-		if err := protocol.ValidateRepairResult(env); err != nil {
-			return a.fail("repair", &CLIError{Code: "INTERNAL_ERROR", Message: "repair output validation failed", Details: map[string]any{"reason": err.Error()}})
-		}
-		return a.writeJSON(env)
+		return a.writeValidatedJSONSuccess("repair", data, protocol.ValidateRepairResult, "repair output validation failed")
 	}
 	if len(results) == 0 {
 		printNoInstalledPackages(a.Stdout)

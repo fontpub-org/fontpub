@@ -8,6 +8,39 @@ import (
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
+type envelopeValidator func(protocol.CLIEnvelope) error
+
+func successEnvelope(command string, data map[string]any) protocol.CLIEnvelope {
+	return protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: command, Data: data}
+}
+
+func errorEnvelope(command, code, message string, details map[string]any) protocol.CLIEnvelope {
+	return protocol.CLIEnvelope{
+		SchemaVersion: "1",
+		OK:            false,
+		Command:       command,
+		Error: &protocol.ErrorObject{
+			Code:    code,
+			Message: message,
+			Details: ensureDetails(details),
+		},
+	}
+}
+
+func (a *App) writeJSONSuccess(command string, data map[string]any) int {
+	return a.writeJSON(successEnvelope(command, data))
+}
+
+func (a *App) writeValidatedJSONSuccess(command string, data map[string]any, validate envelopeValidator, failureMessage string) int {
+	env := successEnvelope(command, data)
+	if validate != nil {
+		if err := validate(env); err != nil {
+			return a.fail(command, &CLIError{Code: "INTERNAL_ERROR", Message: failureMessage, Details: map[string]any{"reason": err.Error()}})
+		}
+	}
+	return a.writeJSON(env)
+}
+
 func (a *App) writeMutationResult(command string, changed bool, planned []PlannedAction, extra map[string]any) int {
 	data := map[string]any{"changed": changed}
 	for k, v := range extra {
@@ -17,7 +50,7 @@ func (a *App) writeMutationResult(command string, changed bool, planned []Planne
 		data["planned_actions"] = plannedActionsToAny(planned)
 	}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: command, Data: data})
+		return a.writeJSONSuccess(command, data)
 	}
 	if !changed {
 		fmt.Fprintln(a.Stdout, "no changes")
@@ -36,16 +69,7 @@ func (a *App) writePackageFailure(command, message string, results []PackageChec
 		}
 	}
 	if a.JSON {
-		_ = a.writeJSON(protocol.CLIEnvelope{
-			SchemaVersion: "1",
-			OK:            false,
-			Command:       command,
-			Error: &protocol.ErrorObject{
-				Code:    firstCode,
-				Message: message,
-				Details: packageResultsToDetails(results),
-			},
-		})
+		_ = a.writeJSON(errorEnvelope(command, firstCode, message, packageResultsToDetails(results)))
 		return 1
 	}
 	fmt.Fprintln(a.Stderr, message)
@@ -58,16 +82,7 @@ func (a *App) fail(command string, err *CLIError) int {
 		err = &CLIError{Code: "INTERNAL_ERROR", Message: "unknown error", Details: map[string]any{}}
 	}
 	if a.JSON {
-		_ = a.writeJSON(protocol.CLIEnvelope{
-			SchemaVersion: "1",
-			OK:            false,
-			Command:       command,
-			Error: &protocol.ErrorObject{
-				Code:    err.Code,
-				Message: err.Message,
-				Details: ensureDetails(err.Details),
-			},
-		})
+		_ = a.writeJSON(errorEnvelope(command, err.Code, err.Message, err.Details))
 		return 1
 	}
 	printHumanError(a.Stderr, command, err)

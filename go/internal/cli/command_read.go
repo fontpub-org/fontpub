@@ -36,7 +36,7 @@ func (a *App) runLSRemote(ctx context.Context, args []string) int {
 	}
 	data := map[string]any{"packages": packages}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "ls-remote", Data: data})
+		return a.writeJSONSuccess("ls-remote", data)
 	}
 	if len(packages) == 0 {
 		printNoPublishedPackages(a.Stdout)
@@ -88,7 +88,7 @@ func (a *App) runShow(ctx context.Context, args []string) int {
 		return a.fail("show", cliErr)
 	}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "show", Data: data})
+		return a.writeJSONSuccess("show", data)
 	}
 	printPackageDetailSummary(a.Stdout, detail)
 	return 0
@@ -141,11 +141,7 @@ func (a *App) runLS(_ context.Context, args []string) int {
 
 	data := map[string]any{"packages": packagesData}
 	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "ls", Data: data}
-		if err := protocol.ValidateStatusResult(env); err != nil {
-			return a.fail("ls", &CLIError{Code: "INTERNAL_ERROR", Message: "ls output validation failed", Details: map[string]any{"reason": err.Error()}})
-		}
-		return a.writeJSON(env)
+		return a.writeValidatedJSONSuccess("ls", data, protocol.ValidateStatusResult, "ls output validation failed")
 	}
 	if len(packagesData) == 0 {
 		printNoInstalledPackages(a.Stdout)
@@ -256,11 +252,7 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 	}
 	data := packageResultsToDetails(results)
 	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "verify", Data: data}
-		if err := protocol.ValidateVerifyResult(env); err != nil {
-			return a.fail("verify", &CLIError{Code: "INTERNAL_ERROR", Message: "verify output validation failed", Details: map[string]any{"reason": err.Error()}})
-		}
-		return a.writeJSON(env)
+		return a.writeValidatedJSONSuccess("verify", data, protocol.ValidateVerifyResult, "verify output validation failed")
 	}
 	if len(results) == 0 {
 		printNoInstalledPackages(a.Stdout)

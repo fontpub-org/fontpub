@@ -425,13 +425,6 @@ func stringSliceToAny(values []string) []any {
 	return out
 }
 
-func mustMap(value any) map[string]any {
-	body, _ := json.Marshal(value)
-	out := map[string]any{}
-	_ = json.Unmarshal(body, &out)
-	return out
-}
-
 func protocolErrorToCLI(err error) *CLIError {
 	message := err.Error()
 	code := message

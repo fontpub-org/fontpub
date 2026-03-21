@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-
-	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
 func (a *App) runWorkflow(ctx context.Context, args []string) int {
@@ -36,7 +34,7 @@ func (a *App) runWorkflowInit(_ context.Context, args []string) int {
 		if opts.DryRun {
 			data["planned_actions"] = plannedActionsToAny(planned)
 		}
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "workflow init", Data: data})
+		return a.writeJSONSuccess("workflow init", data)
 	}
 	if opts.DryRun {
 		fmt.Fprintln(a.Stdout, "Workflow write plan")

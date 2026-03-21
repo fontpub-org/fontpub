@@ -59,8 +59,12 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 		printPackageInitSummary(a.Stdout, opts.Root, manifest, assets, inferences, conflicts, unresolved)
 	}
 
+	manifestData, cliErr := structToMap(manifest)
+	if cliErr != nil {
+		return a.fail("package init", cliErr)
+	}
 	data := map[string]any{
-		"manifest":          mustMap(manifest),
+		"manifest":          manifestData,
 		"inferences":        inferenceRecordsToAny(inferences),
 		"conflicts":         conflictRecordsToAny(conflicts),
 		"unresolved_fields": stringSliceToAny(unresolved),
@@ -76,11 +80,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 			return a.fail("package init", asCLIError(err))
 		}
 		if a.JSON {
-			env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package init", Data: data}
-			if err := protocol.ValidatePackageInitResult(env); err != nil {
-				return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "package init output validation failed", Details: map[string]any{"reason": err.Error()}})
-			}
-			return a.writeJSON(env)
+			return a.writeValidatedJSONSuccess("package init", data, protocol.ValidatePackageInitResult, "package init output validation failed")
 		}
 		if opts.DryRun {
 			fmt.Fprintln(a.Stdout, "Manifest write plan")
@@ -96,11 +96,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 	}
 
 	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package init", Data: data}
-		if err := protocol.ValidatePackageInitResult(env); err != nil {
-			return a.fail("package init", &CLIError{Code: "INTERNAL_ERROR", Message: "package init output validation failed", Details: map[string]any{"reason": err.Error()}})
-		}
-		return a.writeJSON(env)
+		return a.writeValidatedJSONSuccess("package init", data, protocol.ValidatePackageInitResult, "package init output validation failed")
 	}
 
 	fmt.Fprintln(a.Stdout, "Candidate fontpub.json:")
@@ -121,14 +117,18 @@ func (a *App) runPackageValidate(_ context.Context, args []string) int {
 	if err != nil {
 		return a.fail("package validate", asCLIError(err))
 	}
+	manifestData, cliErr := structToMap(manifest)
+	if cliErr != nil {
+		return a.fail("package validate", cliErr)
+	}
 	data := map[string]any{
-		"manifest":   mustMap(manifest),
+		"manifest":   manifestData,
 		"root_path":  opts.Root,
 		"validated":  true,
 		"file_count": len(manifest.Files),
 	}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package validate", Data: data})
+		return a.writeJSONSuccess("package validate", data)
 	}
 	printPackageValidateSummary(a.Stdout, opts.Root, manifest)
 	return 0
@@ -143,13 +143,12 @@ func (a *App) runPackagePreview(_ context.Context, args []string) int {
 	if err != nil {
 		return a.fail("package preview", asCLIError(err))
 	}
-	data := mustMap(candidate)
+	data, cliErr := structToMap(candidate)
+	if cliErr != nil {
+		return a.fail("package preview", cliErr)
+	}
 	if a.JSON {
-		env := protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package preview", Data: data}
-		if err := protocol.ValidatePackagePreviewResult(env); err != nil {
-			return a.fail("package preview", &CLIError{Code: "INTERNAL_ERROR", Message: "package preview output validation failed", Details: map[string]any{"reason": err.Error()}})
-		}
-		return a.writeJSON(env)
+		return a.writeValidatedJSONSuccess("package preview", data, protocol.ValidatePackagePreviewResult, "package preview output validation failed")
 	}
 	printPackagePreviewSummary(a.Stdout, candidate)
 	return 0
@@ -163,9 +162,12 @@ func (a *App) runPackageInspect(_ context.Context, args []string) int {
 	if err != nil {
 		return a.fail("package inspect", asCLIError(err))
 	}
-	data := mustMap(info)
+	data, cliErr := structToMap(info)
+	if cliErr != nil {
+		return a.fail("package inspect", cliErr)
+	}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package inspect", Data: data})
+		return a.writeJSONSuccess("package inspect", data)
 	}
 	printInspectionSummary(a.Stdout, info)
 	return 0
@@ -191,7 +193,7 @@ func (a *App) runPackageCheck(_ context.Context, args []string) int {
 		data["tag"] = opts.Tag
 	}
 	if a.JSON {
-		return a.writeJSON(protocol.CLIEnvelope{SchemaVersion: "1", OK: true, Command: "package check", Data: data})
+		return a.writeJSONSuccess("package check", data)
 	}
 	printPackageCheckSummary(a.Stdout, opts.Root, manifest, opts.Tag)
 	return 0
