@@ -67,11 +67,11 @@ func (a *App) runActivate(_ context.Context, args []string) int {
 	if errObj != nil {
 		return a.fail("activate", errObj)
 	}
-	activationDir, args, errObj := extractStringFlag(args, "--activation-dir")
+	version, rest, errObj := extractStringFlag(args, "--version")
 	if errObj != nil {
 		return a.fail("activate", errObj)
 	}
-	version, rest, errObj := extractStringFlag(args, "--version")
+	activationDir, rest, errObj := extractStringFlag(rest, "--activation-dir")
 	if errObj != nil {
 		return a.fail("activate", errObj)
 	}

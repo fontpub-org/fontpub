@@ -167,10 +167,16 @@ func chooseInstalledVersion(pkg protocol.LockedPackage, requested string) (strin
 		if err != nil {
 			return "", &CLIError{Code: "VERSION_INVALID", Message: "invalid version", Details: map[string]any{"version": requested}}
 		}
-		if _, ok := pkg.InstalledVersions[versionKey]; !ok {
-			return "", &CLIError{Code: "NOT_INSTALLED", Message: "requested version is not installed", Details: map[string]any{"version_key": versionKey}}
+		if _, ok := pkg.InstalledVersions[versionKey]; ok {
+			return versionKey, nil
 		}
-		return versionKey, nil
+		for installedKey := range pkg.InstalledVersions {
+			cmp, err := protocol.CompareVersions(installedKey, versionKey)
+			if err == nil && cmp == 0 {
+				return installedKey, nil
+			}
+		}
+		return "", &CLIError{Code: "NOT_INSTALLED", Message: "requested version is not installed", Details: map[string]any{"version_key": versionKey}}
 	}
 	keys := SortedInstalledVersionKeys(pkg)
 	if len(keys) == 0 {
