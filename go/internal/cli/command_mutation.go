@@ -10,34 +10,11 @@ import (
 )
 
 func (a *App) runInstall(ctx context.Context, args []string) int {
-	dryRun, args, errObj := extractBoolFlag(args, "--dry-run")
+	opts, errObj := parseInstallOptions(args)
 	if errObj != nil {
 		return a.fail("install", errObj)
 	}
-	activate, args, errObj := extractBoolFlag(args, "--activate")
-	if errObj != nil {
-		return a.fail("install", errObj)
-	}
-	activationDir, args, errObj := extractStringFlag(args, "--activation-dir")
-	if errObj != nil {
-		return a.fail("install", errObj)
-	}
-	version, rest, errObj := extractStringFlag(args, "--version")
-	if errObj != nil {
-		return a.fail("install", errObj)
-	}
-	if len(rest) != 1 {
-		return a.fail("install", &CLIError{Code: "INPUT_REQUIRED", Message: "install requires <owner>/<repo>", Details: map[string]any{}})
-	}
-	packageID := normalizePackageID(rest[0])
-
-	var detail protocol.VersionedPackageDetail
-	var err error
-	if version == "" {
-		detail, err = a.Client.GetLatestPackageDetail(ctx, packageID)
-	} else {
-		detail, err = a.Client.GetPackageDetailVersion(ctx, packageID, version)
-	}
+	detail, err := a.resolvePackageDetail(ctx, opts.PackageID, opts.Version)
 	if err != nil {
 		return a.fail("install", asCLIError(err))
 	}
@@ -46,70 +23,58 @@ func (a *App) runInstall(ctx context.Context, args []string) int {
 	if err != nil {
 		return a.fail("install", asCLIError(err))
 	}
-	changed, planned, installErr := a.installDetail(ctx, &lock, detail, activate, activationDir, dryRun)
+	changed, planned, installErr := a.installDetail(ctx, &lock, detail, opts.Activate, opts.ActivationDir, opts.DryRun)
 	if installErr != nil {
 		return a.fail("install", asCLIError(installErr))
 	}
 
-	if !dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID, VersionKey: detail.VersionKey})
+	if !opts.DryRun && changed {
+		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: detail.VersionKey})
 		if err := a.saveLockfile(lock); err != nil {
 			return a.fail("install", asCLIError(err))
 		}
-	} else if dryRun && changed {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID, VersionKey: detail.VersionKey})
+	} else if opts.DryRun && changed {
+		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: detail.VersionKey})
 	}
-	return a.writeInstallResult(packageID, detail.VersionKey, activate, activationDir, changed, dryRun, planned)
+	return a.writeInstallResult(opts.PackageID, detail.VersionKey, opts.Activate, opts.ActivationDir, changed, opts.DryRun, planned)
 }
 
 func (a *App) runActivate(_ context.Context, args []string) int {
-	dryRun, args, errObj := extractBoolFlag(args, "--dry-run")
+	opts, errObj := parseActivateOptions(args)
 	if errObj != nil {
 		return a.fail("activate", errObj)
 	}
-	version, rest, errObj := extractStringFlag(args, "--version")
-	if errObj != nil {
-		return a.fail("activate", errObj)
+	if opts.ActivationDir == "" {
+		opts.ActivationDir = a.Config.DefaultActivationDir
 	}
-	activationDir, rest, errObj := extractStringFlag(rest, "--activation-dir")
-	if errObj != nil {
-		return a.fail("activate", errObj)
-	}
-	if len(rest) != 1 {
-		return a.fail("activate", &CLIError{Code: "INPUT_REQUIRED", Message: "activate requires <owner>/<repo>", Details: map[string]any{}})
-	}
-	if activationDir == "" {
-		activationDir = a.Config.DefaultActivationDir
-	}
-	if activationDir == "" {
+	if opts.ActivationDir == "" {
 		return a.fail("activate", &CLIError{Code: "INPUT_REQUIRED", Message: "activation directory is required", Details: map[string]any{"flag": "--activation-dir"}})
 	}
-	packageID := normalizePackageID(rest[0])
 	lock, err := a.loadOrInitLockfile()
 	if err != nil {
 		return a.fail("activate", asCLIError(err))
 	}
-	pkg, ok := lock.Packages[packageID]
+	pkg, ok := lock.Packages[opts.PackageID]
 	if !ok {
-		return a.fail("activate", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": packageID}})
+		return a.fail("activate", &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": opts.PackageID}})
 	}
-	versionKey, chooseErr := chooseInstalledVersion(pkg, version)
+	versionKey, chooseErr := chooseInstalledVersion(pkg, opts.Version)
 	if chooseErr != nil {
 		return a.fail("activate", chooseErr)
 	}
-	planned, actErr := a.activateVersion(&lock, packageID, versionKey, activationDir, dryRun)
+	planned, actErr := a.activateVersion(&lock, opts.PackageID, versionKey, opts.ActivationDir, opts.DryRun)
 	if actErr != nil {
 		return a.fail("activate", asCLIError(actErr))
 	}
-	if !dryRun {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID, VersionKey: versionKey})
+	if !opts.DryRun {
+		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: versionKey})
 		if err := a.saveLockfile(lock); err != nil {
 			return a.fail("activate", asCLIError(err))
 		}
 	} else {
-		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: packageID, VersionKey: versionKey})
+		planned = append(planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID, VersionKey: versionKey})
 	}
-	return a.writeActivateResult(packageID, versionKey, activationDir, dryRun, planned)
+	return a.writeActivateResult(opts.PackageID, versionKey, opts.ActivationDir, opts.DryRun, planned)
 }
 
 func (a *App) runDeactivate(_ context.Context, args []string) int {

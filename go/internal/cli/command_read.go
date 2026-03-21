@@ -75,23 +75,11 @@ func humanDate(value string) string {
 }
 
 func (a *App) runShow(ctx context.Context, args []string) int {
-	version, rest, errObj := extractStringFlag(args, "--version")
+	opts, errObj := parseShowOptions(args)
 	if errObj != nil {
 		return a.fail("show", errObj)
 	}
-	if len(rest) != 1 {
-		return a.fail("show", &CLIError{Code: "INPUT_REQUIRED", Message: "show requires <owner>/<repo>", Details: map[string]any{}})
-	}
-	packageID := normalizePackageID(rest[0])
-	var (
-		detail protocol.VersionedPackageDetail
-		err    error
-	)
-	if version == "" {
-		detail, err = a.Client.GetLatestPackageDetail(ctx, packageID)
-	} else {
-		detail, err = a.Client.GetPackageDetailVersion(ctx, packageID, version)
-	}
+	detail, err := a.resolvePackageDetail(ctx, opts.PackageID, opts.Version)
 	if err != nil {
 		return a.fail("show", asCLIError(err))
 	}

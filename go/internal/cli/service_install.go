@@ -11,6 +11,13 @@ import (
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
 
+func (a *App) resolvePackageDetail(ctx context.Context, packageID, version string) (protocol.VersionedPackageDetail, error) {
+	if version == "" {
+		return a.Client.GetLatestPackageDetail(ctx, packageID)
+	}
+	return a.Client.GetPackageDetailVersion(ctx, packageID, version)
+}
+
 func (a *App) installDetail(ctx context.Context, lock *protocol.Lockfile, detail protocol.VersionedPackageDetail, activate bool, activationDir string, dryRun bool) (bool, []PlannedAction, error) {
 	packageID := detail.PackageID
 	pkg := lock.Packages[packageID]
