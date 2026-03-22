@@ -86,9 +86,9 @@ func (f *fakeS3Client) ListObjectsV2(_ context.Context, in *s3.ListObjectsV2Inpu
 
 type fakeS3APIError struct{ code string }
 
-func (e fakeS3APIError) Error() string          { return e.code }
-func (e fakeS3APIError) ErrorCode() string      { return e.code }
-func (e fakeS3APIError) ErrorMessage() string   { return e.code }
+func (e fakeS3APIError) Error() string                 { return e.code }
+func (e fakeS3APIError) ErrorCode() string             { return e.code }
+func (e fakeS3APIError) ErrorMessage() string          { return e.code }
 func (e fakeS3APIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
 
 func TestS3StoreRoundTrip(t *testing.T) {
@@ -151,5 +151,60 @@ func TestS3StoreListAllVersionedPackageDetails(t *testing.T) {
 	}
 	if len(list) != 2 || list[0].PackageID != "0xtype/gamut" || list[1].PackageID != "example/family" {
 		t.Fatalf("unexpected list: %+v", list)
+	}
+}
+
+func TestS3StoreListsPackageVersionsAndDerivedDocuments(t *testing.T) {
+	client := &fakeS3Client{objects: map[string][]byte{}, pageSize: 1}
+	store := NewS3Store(client, "fontpub-test", S3StoreOptions{Prefix: "dev"})
+	for _, detail := range []protocol.VersionedPackageDetail{
+		{SchemaVersion: "1", PackageID: "example/family", DisplayName: "Example Sans", Author: "Example", License: "OFL-1.1", Version: "1.10.0", VersionKey: "1.10.0", PublishedAt: "2026-03-19T00:00:01Z"},
+		{SchemaVersion: "1", PackageID: "example/family", DisplayName: "Example Sans", Author: "Example", License: "OFL-1.1", Version: "1.2.3", VersionKey: "1.2.3", PublishedAt: "2026-03-19T00:00:00Z"},
+	} {
+		body, err := protocol.MarshalCanonical(detail)
+		if err != nil {
+			t.Fatalf("MarshalCanonical: %v", err)
+		}
+		if err := store.PutVersionedPackageDetail(context.Background(), detail, body, derive.ComputeETag(body)); err != nil {
+			t.Fatalf("PutVersionedPackageDetail: %v", err)
+		}
+	}
+	list, err := store.ListPackageVersionedPackageDetails(context.Background(), "example/family")
+	if err != nil {
+		t.Fatalf("ListPackageVersionedPackageDetails: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("unexpected list: %+v", list)
+	}
+	if err := store.PutPackageVersionsIndex(context.Background(), "example/family", protocol.PackageVersionsIndex{}, []byte(`{"index":true}`), `"etag"`); err != nil {
+		t.Fatalf("PutPackageVersionsIndex: %v", err)
+	}
+	if err := store.PutLatestAlias(context.Background(), "example/family", []byte(`{"latest":true}`), `"etag"`); err != nil {
+		t.Fatalf("PutLatestAlias: %v", err)
+	}
+	if err := store.PutRootIndex(context.Background(), protocol.RootIndex{}, []byte(`{"root":true}`), `"etag"`); err != nil {
+		t.Fatalf("PutRootIndex: %v", err)
+	}
+	if _, ok, err := store.GetDocument(context.Background(), PackageVersionsIndexPath("example/family")); err != nil || !ok {
+		t.Fatalf("GetDocument(package index): ok=%v err=%v", ok, err)
+	}
+}
+
+func TestS3StoreKeyPathHelpersAndNotFound(t *testing.T) {
+	store := NewS3Store(&fakeS3Client{}, "fontpub-test", S3StoreOptions{Prefix: "dev"})
+	if got := store.keyForPath("/v1/index.json"); got != "dev/v1/index.json" {
+		t.Fatalf("unexpected key: %s", got)
+	}
+	if got, ok := store.pathForKey("dev/v1/index.json"); !ok || got != "/v1/index.json" {
+		t.Fatalf("unexpected path: %q ok=%v", got, ok)
+	}
+	if _, ok := store.pathForKey("other/v1/index.json"); ok {
+		t.Fatalf("expected non-matching prefix to be rejected")
+	}
+	if !isNotFound(fakeS3APIError{code: "NoSuchKey"}) || !isNotFound(fakeS3APIError{code: "NotFound"}) {
+		t.Fatalf("expected not found codes to be recognized")
+	}
+	if isNotFound(fakeS3APIError{code: "AccessDenied"}) {
+		t.Fatalf("unexpected not-found classification")
 	}
 }

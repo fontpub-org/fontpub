@@ -2,8 +2,10 @@ package state
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestFileStorePersistsReplayProtectionAcrossRestart(t *testing.T) {
@@ -52,5 +54,39 @@ func TestFileStoreConcurrentInstancesDoNotCorruptState(t *testing.T) {
 	}
 	if err := restarted.CheckOrBindPackage(context.Background(), "example/family", "123"); err != nil {
 		t.Fatalf("restarted CheckOrBindPackage: %v", err)
+	}
+}
+
+func TestFileStoreAcquireLockRespectsContextCancellation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	store := NewFileStore(path)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(store.lockPath, []byte("held"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	if _, err := store.acquireLock(ctx); err == nil {
+		t.Fatalf("expected context cancellation")
+	}
+}
+
+func TestFileStoreLoadInitializesMissingCollectionsAndRejectsInvalidJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	store := NewFileStore(path)
+	current, err := store.load()
+	if err != nil {
+		t.Fatalf("load missing file: %v", err)
+	}
+	if current.SchemaVersion != "1" || current.PackageBindings == nil || current.UsedJTI == nil {
+		t.Fatalf("unexpected current state: %+v", current)
+	}
+	if err := os.WriteFile(path, []byte("{"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, err := store.load(); err == nil {
+		t.Fatalf("expected invalid JSON error")
 	}
 }

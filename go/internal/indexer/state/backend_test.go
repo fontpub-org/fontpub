@@ -58,3 +58,22 @@ func TestNewStoreFromEnvRejectsMissingFileDir(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestLoadBackendConfigDefaultsAndRejectsUnsupportedBackend(t *testing.T) {
+	cfg := LoadBackendConfig(nil)
+	if cfg.Backend != "" || cfg.StateDir != "" {
+		t.Fatalf("unexpected config: %+v", cfg)
+	}
+	_, err := NewStoreFromEnv(context.Background(), EnvStoreOptions{
+		DefaultBackend: "memory",
+		Getenv: func(key string) string {
+			if key == "FONTPUB_STATE_BACKEND" {
+				return "bogus"
+			}
+			return ""
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

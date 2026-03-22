@@ -89,3 +89,28 @@ func TestNewStoreFromEnvRequiresS3Settings(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestNewStoreFromEnvRejectsUnsupportedBackend(t *testing.T) {
+	_, err := NewStoreFromEnv(context.Background(), EnvStoreOptions{
+		DefaultBackend: "memory",
+		Getenv: func(key string) string {
+			if key == "FONTPUB_ARTIFACTS_BACKEND" {
+				return "bogus"
+			}
+			return ""
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestLoadBackendConfigNilGetenvAndParseBool(t *testing.T) {
+	cfg := LoadBackendConfig(nil)
+	if cfg.Backend != "" || cfg.ArtifactsDir != "" || cfg.S3ForcePathStyle {
+		t.Fatalf("unexpected config: %+v", cfg)
+	}
+	if !parseBool("yes") || !parseBool("on") || parseBool("no") {
+		t.Fatalf("unexpected parseBool behavior")
+	}
+}
