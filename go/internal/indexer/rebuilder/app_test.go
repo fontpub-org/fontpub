@@ -2,6 +2,7 @@ package rebuilder
 
 import (
 	"context"
+	"flag"
 	"testing"
 
 	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
@@ -71,6 +72,61 @@ func TestAppRunRebuildsSelectedPackage(t *testing.T) {
 	}
 	if _, ok, _ := store.GetDocument(context.Background(), artifacts.RootIndexPath()); !ok {
 		t.Fatalf("root index not written")
+	}
+}
+
+func TestParseOptionsAndHelpers(t *testing.T) {
+	options, err := ParseOptions([]string{"--artifacts-backend", "memory", "--artifacts-dir", "/override"}, func(key string) string {
+		switch key {
+		case "FONTPUB_ARTIFACTS_DIR":
+			return "/tmp/from-env"
+		case "FONTPUB_ARTIFACTS_BACKEND":
+			return "file"
+		default:
+			return ""
+		}
+	}, flag.ContinueOnError)
+	if err != nil {
+		t.Fatalf("ParseOptions: %v", err)
+	}
+	if options.Backend != "memory" || options.ArtifactsDir != "/override" {
+		t.Fatalf("unexpected options: %+v", options)
+	}
+	if _, err := ParseOptions([]string{"--bogus"}, func(string) string { return "" }, flag.ContinueOnError); err == nil {
+		t.Fatalf("expected unknown flag error")
+	}
+	if n, err := (ioDiscard{}).Write([]byte("abc")); err != nil || n != 3 {
+		t.Fatalf("unexpected ioDiscard result: n=%d err=%v", n, err)
+	}
+}
+
+func TestLoadConfigEnvFallbackAndAppRebuilderFallback(t *testing.T) {
+	artifactsDir := t.TempDir()
+	cfg, err := LoadConfig(context.Background(), nil, func(key string) string {
+		switch key {
+		case "FONTPUB_ARTIFACTS_DIR":
+			return artifactsDir
+		case "FONTPUB_ARTIFACTS_BACKEND":
+			return "file"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if _, ok := cfg.Store.(*artifacts.FileStore); !ok {
+		t.Fatalf("expected FileStore, got %T", cfg.Store)
+	}
+	if _, err := (App{}).Run(context.Background(), "example/family"); err == nil {
+		t.Fatalf("expected fallback rebuilder to fail without store")
+	}
+}
+
+func TestBuildStorePropagatesBackendErrors(t *testing.T) {
+	_, err := buildStore(context.Background(), Options{Backend: "bogus"}, func(string) string { return "" })
+	if err == nil {
+		t.Fatalf("expected backend error")
 	}
 }
 

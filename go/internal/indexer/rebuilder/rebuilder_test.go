@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,58 @@ import (
 	"github.com/fontpub-org/fontpub/go/internal/indexer/derive"
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
+
+type failingStore struct {
+	base               *artifacts.MemoryStore
+	listAllErr         error
+	putPackageIndexErr error
+	putLatestAliasErr  error
+	putRootIndexErr    error
+}
+
+func (s failingStore) GetVersionedPackageDetail(ctx context.Context, packageID, versionKey string) (protocol.VersionedPackageDetail, bool, error) {
+	return s.base.GetVersionedPackageDetail(ctx, packageID, versionKey)
+}
+
+func (s failingStore) PutVersionedPackageDetail(ctx context.Context, detail protocol.VersionedPackageDetail, body []byte, etag string) error {
+	return s.base.PutVersionedPackageDetail(ctx, detail, body, etag)
+}
+
+func (s failingStore) ListPackageVersionedPackageDetails(ctx context.Context, packageID string) ([]protocol.VersionedPackageDetail, error) {
+	return s.base.ListPackageVersionedPackageDetails(ctx, packageID)
+}
+
+func (s failingStore) ListAllVersionedPackageDetails(ctx context.Context) ([]protocol.VersionedPackageDetail, error) {
+	if s.listAllErr != nil {
+		return nil, s.listAllErr
+	}
+	return s.base.ListAllVersionedPackageDetails(ctx)
+}
+
+func (s failingStore) PutPackageVersionsIndex(ctx context.Context, packageID string, index protocol.PackageVersionsIndex, body []byte, etag string) error {
+	if s.putPackageIndexErr != nil {
+		return s.putPackageIndexErr
+	}
+	return s.base.PutPackageVersionsIndex(ctx, packageID, index, body, etag)
+}
+
+func (s failingStore) PutLatestAlias(ctx context.Context, packageID string, body []byte, etag string) error {
+	if s.putLatestAliasErr != nil {
+		return s.putLatestAliasErr
+	}
+	return s.base.PutLatestAlias(ctx, packageID, body, etag)
+}
+
+func (s failingStore) PutRootIndex(ctx context.Context, index protocol.RootIndex, body []byte, etag string) error {
+	if s.putRootIndexErr != nil {
+		return s.putRootIndexErr
+	}
+	return s.base.PutRootIndex(ctx, index, body, etag)
+}
+
+func (s failingStore) GetDocument(ctx context.Context, path string) (artifacts.Document, bool, error) {
+	return s.base.GetDocument(ctx, path)
+}
 
 func TestRebuildAllMatchesGolden(t *testing.T) {
 	store := artifacts.NewMemoryStore()
@@ -165,6 +218,88 @@ func TestRebuildAllChoosesLatestVersionByPrecedence(t *testing.T) {
 	}
 }
 
+func TestRebuilderFailurePathsAndScope(t *testing.T) {
+	t.Run("nil store", func(t *testing.T) {
+		if _, err := (Rebuilder{}).RebuildAll(context.Background()); err == nil {
+			t.Fatalf("expected nil store error")
+		}
+		if _, err := (Rebuilder{}).RebuildPackage(context.Background(), "example/family"); err == nil {
+			t.Fatalf("expected nil store error")
+		}
+	})
+
+	t.Run("package not found", func(t *testing.T) {
+		store := artifacts.NewMemoryStore()
+		if _, err := (Rebuilder{Store: store}).RebuildPackage(context.Background(), "missing/package"); err == nil {
+			t.Fatalf("expected missing package error")
+		}
+	})
+
+	t.Run("list all failure", func(t *testing.T) {
+		store := failingStore{base: artifacts.NewMemoryStore(), listAllErr: errors.New("boom")}
+		if _, err := (Rebuilder{Store: store}).RebuildAll(context.Background()); err == nil {
+			t.Fatalf("expected list failure")
+		}
+	})
+
+	t.Run("package write failure", func(t *testing.T) {
+		base := artifacts.NewMemoryStore()
+		putVersionedDetail(t, base, protocol.VersionedPackageDetail{
+			SchemaVersion: "1",
+			PackageID:     "example/family",
+			DisplayName:   "Example Sans",
+			Author:        "Example Studio",
+			License:       "OFL-1.1",
+			Version:       "1.2.3",
+			VersionKey:    "1.2.3",
+			PublishedAt:   "2026-01-02T00:00:00Z",
+			GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "0123456789abcdef0123456789abcdef01234567"},
+			ManifestURL:   "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+			Assets:        []protocol.VersionedAsset{{Path: "dist/ExampleSans-Regular.otf", URL: "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/dist/ExampleSans-Regular.otf", SHA256: "abc", Format: "otf", Style: "normal", Weight: 400, SizeBytes: 11}},
+		})
+		store := failingStore{base: base, putPackageIndexErr: errors.New("boom")}
+		if _, err := (Rebuilder{Store: store}).RebuildAll(context.Background()); err == nil {
+			t.Fatalf("expected package write failure")
+		}
+	})
+
+	t.Run("root write failure", func(t *testing.T) {
+		base := artifacts.NewMemoryStore()
+		putVersionedDetail(t, base, protocol.VersionedPackageDetail{
+			SchemaVersion: "1",
+			PackageID:     "example/family",
+			DisplayName:   "Example Sans",
+			Author:        "Example Studio",
+			License:       "OFL-1.1",
+			Version:       "1.2.3",
+			VersionKey:    "1.2.3",
+			PublishedAt:   "2026-01-02T00:00:00Z",
+			GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "0123456789abcdef0123456789abcdef01234567"},
+			ManifestURL:   "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+			Assets:        []protocol.VersionedAsset{{Path: "dist/ExampleSans-Regular.otf", URL: "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/dist/ExampleSans-Regular.otf", SHA256: "abc", Format: "otf", Style: "normal", Weight: 400, SizeBytes: 11}},
+		})
+		store := failingStore{base: base, putRootIndexErr: errors.New("boom")}
+		if _, err := (Rebuilder{Store: store}).RebuildAll(context.Background()); err == nil {
+			t.Fatalf("expected root write failure")
+		}
+	})
+
+	t.Run("multiple package scope", func(t *testing.T) {
+		grouped := groupPackageDetails([]protocol.VersionedPackageDetail{
+			scopedDetail("example/family", "1.2.3", "2026-01-02T00:00:00Z"),
+			scopedDetail("example/serif", "2.0.0", "2026-01-03T00:00:00Z"),
+			scopedDetail("example/serif", "2.1.0", "2026-01-04T00:00:00Z"),
+		})
+		packageIDs, versions, err := rebuildScope(grouped, "")
+		if err != nil {
+			t.Fatalf("rebuildScope: %v", err)
+		}
+		if len(packageIDs) != 2 || packageIDs[0] != "example/family" || packageIDs[1] != "example/serif" || versions != 3 {
+			t.Fatalf("unexpected scope: packageIDs=%v versions=%d", packageIDs, versions)
+		}
+	})
+}
+
 func putVersionedDetail(t *testing.T, store *artifacts.MemoryStore, detail protocol.VersionedPackageDetail) {
 	t.Helper()
 	body, err := protocol.MarshalCanonical(detail)
@@ -185,6 +320,22 @@ func assertGoldenDocument(t *testing.T, store *artifacts.MemoryStore, path, gold
 	golden := readGoldenFile(t, goldenName)
 	if !bytes.Equal(doc.Body, golden) {
 		t.Fatalf("golden mismatch for %s\ngot: %s\nwant: %s", path, doc.Body, golden)
+	}
+}
+
+func scopedDetail(packageID, version, publishedAt string) protocol.VersionedPackageDetail {
+	return protocol.VersionedPackageDetail{
+		SchemaVersion: "1",
+		PackageID:     packageID,
+		DisplayName:   "Example Sans",
+		Author:        "Example Studio",
+		License:       "OFL-1.1",
+		Version:       version,
+		VersionKey:    version,
+		PublishedAt:   publishedAt,
+		GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "0123456789abcdef0123456789abcdef01234567"},
+		ManifestURL:   "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/fontpub.json",
+		Assets:        []protocol.VersionedAsset{{Path: "dist/ExampleSans-Regular.otf", URL: "https://raw.githubusercontent.com/example/family/0123456789abcdef0123456789abcdef01234567/dist/ExampleSans-Regular.otf", SHA256: "abc", Format: "otf", Style: "normal", Weight: 400, SizeBytes: 11}},
 	}
 }
 
