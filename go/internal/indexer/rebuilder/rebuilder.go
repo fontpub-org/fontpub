@@ -19,6 +19,13 @@ type Result struct {
 	Versions int
 }
 
+type rebuildPlan struct {
+	allDetails   []protocol.VersionedPackageDetail
+	grouped      map[string][]protocol.VersionedPackageDetail
+	packageIDs   []string
+	versionCount int
+}
+
 func (r Rebuilder) RebuildAll(ctx context.Context) (Result, error) {
 	return r.run(ctx, "")
 }
@@ -34,26 +41,44 @@ func (r Rebuilder) run(ctx context.Context, packageID string) (Result, error) {
 	if r.Store == nil {
 		return Result{}, fmt.Errorf("artifact store is not configured")
 	}
+	plan, err := r.loadPlan(ctx, packageID)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := r.executePlan(ctx, plan); err != nil {
+		return Result{}, err
+	}
+	return Result{Packages: len(plan.packageIDs), Versions: plan.versionCount}, nil
+}
 
+func (r Rebuilder) loadPlan(ctx context.Context, packageID string) (rebuildPlan, error) {
 	allDetails, err := r.Store.ListAllVersionedPackageDetails(ctx)
 	if err != nil {
-		return Result{}, err
+		return rebuildPlan{}, err
 	}
 	grouped := groupPackageDetails(allDetails)
-
 	packageIDs, versionCount, err := rebuildScope(grouped, packageID)
 	if err != nil {
-		return Result{}, err
+		return rebuildPlan{}, err
 	}
-	for _, currentPackageID := range packageIDs {
-		if err := r.writePackageDerived(ctx, currentPackageID, grouped[currentPackageID]); err != nil {
-			return Result{}, err
+	return rebuildPlan{
+		allDetails:   allDetails,
+		grouped:      grouped,
+		packageIDs:   packageIDs,
+		versionCount: versionCount,
+	}, nil
+}
+
+func (r Rebuilder) executePlan(ctx context.Context, plan rebuildPlan) error {
+	for _, packageID := range plan.packageIDs {
+		if err := r.writePackageDerived(ctx, packageID, plan.grouped[packageID]); err != nil {
+			return err
 		}
 	}
-	if err := r.writeRootIndex(ctx, allDetails); err != nil {
-		return Result{}, err
+	if err := r.writeRootIndex(ctx, plan.allDetails); err != nil {
+		return err
 	}
-	return Result{Packages: len(packageIDs), Versions: versionCount}, nil
+	return nil
 }
 
 func (r Rebuilder) writePackageDerived(ctx context.Context, packageID string, details []protocol.VersionedPackageDetail) error {

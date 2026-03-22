@@ -19,19 +19,16 @@ func WritePackage(ctx context.Context, store artifacts.Store, packageID string, 
 	if err != nil {
 		return PackageWriteResult{}, err
 	}
-	packageIndexBytes, packageIndexETag, err := marshalCanonical(packageIndex)
+	packageIndexETag, err := writeCanonicalDocument(ctx, func(body []byte, etag string) error {
+		return store.PutPackageVersionsIndex(ctx, packageID, packageIndex, body, etag)
+	}, packageIndex)
 	if err != nil {
 		return PackageWriteResult{}, err
 	}
-	if err := store.PutPackageVersionsIndex(ctx, packageID, packageIndex, packageIndexBytes, packageIndexETag); err != nil {
-		return PackageWriteResult{}, err
-	}
-
-	latestBytes, latestETag, err := marshalCanonical(latestDetail)
+	latestETag, err := writeCanonicalDocument(ctx, func(body []byte, etag string) error {
+		return store.PutLatestAlias(ctx, packageID, body, etag)
+	}, latestDetail)
 	if err != nil {
-		return PackageWriteResult{}, err
-	}
-	if err := store.PutLatestAlias(ctx, packageID, latestBytes, latestETag); err != nil {
 		return PackageWriteResult{}, err
 	}
 
@@ -47,14 +44,9 @@ func WriteRoot(ctx context.Context, store artifacts.Store, details []protocol.Ve
 	if err != nil {
 		return "", err
 	}
-	rootBytes, rootETag, err := marshalCanonical(rootIndex)
-	if err != nil {
-		return "", err
-	}
-	if err := store.PutRootIndex(ctx, rootIndex, rootBytes, rootETag); err != nil {
-		return "", err
-	}
-	return rootETag, nil
+	return writeCanonicalDocument(ctx, func(body []byte, etag string) error {
+		return store.PutRootIndex(ctx, rootIndex, body, etag)
+	}, rootIndex)
 }
 
 func marshalCanonical(value any) ([]byte, string, error) {
@@ -63,4 +55,15 @@ func marshalCanonical(value any) ([]byte, string, error) {
 		return nil, "", err
 	}
 	return body, derive.ComputeETag(body), nil
+}
+
+func writeCanonicalDocument(ctx context.Context, write func(body []byte, etag string) error, value any) (string, error) {
+	body, etag, err := marshalCanonical(value)
+	if err != nil {
+		return "", err
+	}
+	if err := write(body, etag); err != nil {
+		return "", err
+	}
+	return etag, nil
 }
