@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -92,6 +93,21 @@ func TestLoadConfigUsesFileStores(t *testing.T) {
 	}
 }
 
+func TestLoadConfigUsesAddrOverride(t *testing.T) {
+	cfg, err := LoadConfig(context.Background(), func(key string) string {
+		if key == "FONTPUB_INDEXER_ADDR" {
+			return "127.0.0.1:18080"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Addr != "127.0.0.1:18080" {
+		t.Fatalf("unexpected addr: %s", cfg.Addr)
+	}
+}
+
 func TestBuildVerifierFromEnvUsesStaticProvider(t *testing.T) {
 	verifier := buildVerifierFromEnv(func(key string) string {
 		if key == "FONTPUB_GITHUB_JWKS_JSON" {
@@ -167,5 +183,32 @@ func TestAppListenAndServeUsesConfiguredAddress(t *testing.T) {
 	}
 	if gotAddr != "127.0.0.1:18080" {
 		t.Fatalf("unexpected addr: %s", gotAddr)
+	}
+}
+
+func TestAppClockFallbackAndRunPropagation(t *testing.T) {
+	if _, ok := (App{}).clock().(updateapi.RealClock); !ok {
+		t.Fatalf("expected RealClock fallback")
+	}
+
+	sentinel := errors.New("listen failed")
+	err := Run(context.Background(), func(string) string { return "" }, func(string, http.Handler) error {
+		return sentinel
+	})
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("unexpected Run error: %v", err)
+	}
+
+	err = Run(context.Background(), func(key string) string {
+		if key == "FONTPUB_ARTIFACTS_BACKEND" {
+			return "bogus"
+		}
+		return ""
+	}, func(string, http.Handler) error {
+		t.Fatalf("listenAndServe should not be called")
+		return nil
+	})
+	if err == nil {
+		t.Fatalf("expected config error")
 	}
 }

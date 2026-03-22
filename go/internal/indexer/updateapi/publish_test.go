@@ -3,6 +3,7 @@ package updateapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -18,6 +19,83 @@ type fixedClock struct {
 }
 
 func (c fixedClock) Now() time.Time { return c.t }
+
+type failingArtifactStore struct {
+	base                *artifacts.MemoryStore
+	getVersionedErr     error
+	listPackageErr      error
+	listAllErr          error
+	putVersionedErr     error
+	putPackageIndexErr  error
+	putLatestAliasErr   error
+	putRootIndexErr     error
+	getVersionedFound   bool
+	getVersionedDetail  protocol.VersionedPackageDetail
+	overrideListPackage []protocol.VersionedPackageDetail
+	overrideListAll     []protocol.VersionedPackageDetail
+}
+
+func (s failingArtifactStore) GetVersionedPackageDetail(ctx context.Context, packageID, versionKey string) (protocol.VersionedPackageDetail, bool, error) {
+	if s.getVersionedErr != nil {
+		return protocol.VersionedPackageDetail{}, false, s.getVersionedErr
+	}
+	if s.getVersionedFound {
+		return s.getVersionedDetail, true, nil
+	}
+	return s.base.GetVersionedPackageDetail(ctx, packageID, versionKey)
+}
+
+func (s failingArtifactStore) PutVersionedPackageDetail(ctx context.Context, detail protocol.VersionedPackageDetail, body []byte, etag string) error {
+	if s.putVersionedErr != nil {
+		return s.putVersionedErr
+	}
+	return s.base.PutVersionedPackageDetail(ctx, detail, body, etag)
+}
+
+func (s failingArtifactStore) ListPackageVersionedPackageDetails(ctx context.Context, packageID string) ([]protocol.VersionedPackageDetail, error) {
+	if s.listPackageErr != nil {
+		return nil, s.listPackageErr
+	}
+	if s.overrideListPackage != nil {
+		return s.overrideListPackage, nil
+	}
+	return s.base.ListPackageVersionedPackageDetails(ctx, packageID)
+}
+
+func (s failingArtifactStore) ListAllVersionedPackageDetails(ctx context.Context) ([]protocol.VersionedPackageDetail, error) {
+	if s.listAllErr != nil {
+		return nil, s.listAllErr
+	}
+	if s.overrideListAll != nil {
+		return s.overrideListAll, nil
+	}
+	return s.base.ListAllVersionedPackageDetails(ctx)
+}
+
+func (s failingArtifactStore) PutPackageVersionsIndex(ctx context.Context, packageID string, index protocol.PackageVersionsIndex, body []byte, etag string) error {
+	if s.putPackageIndexErr != nil {
+		return s.putPackageIndexErr
+	}
+	return s.base.PutPackageVersionsIndex(ctx, packageID, index, body, etag)
+}
+
+func (s failingArtifactStore) PutLatestAlias(ctx context.Context, packageID string, body []byte, etag string) error {
+	if s.putLatestAliasErr != nil {
+		return s.putLatestAliasErr
+	}
+	return s.base.PutLatestAlias(ctx, packageID, body, etag)
+}
+
+func (s failingArtifactStore) PutRootIndex(ctx context.Context, index protocol.RootIndex, body []byte, etag string) error {
+	if s.putRootIndexErr != nil {
+		return s.putRootIndexErr
+	}
+	return s.base.PutRootIndex(ctx, index, body, etag)
+}
+
+func (s failingArtifactStore) GetDocument(ctx context.Context, path string) (artifacts.Document, bool, error) {
+	return s.base.GetDocument(ctx, path)
+}
 
 func TestPublishingProcessorSuccess(t *testing.T) {
 	processor := newPublishingProcessor(t)
@@ -157,7 +235,7 @@ func TestPublishingProcessorFileStoreBuildsRootIndex(t *testing.T) {
 			State: state.NewMemoryStore(),
 			Fetcher: fakeFetcher{
 				results: map[string]githubraw.Result{
-					mustManifestURL(t, req):                              {Body: manifestBytes, Size: int64(len(manifestBytes))},
+					mustManifestURL(t, req):                               {Body: manifestBytes, Size: int64(len(manifestBytes))},
 					mustAssetURL(t, req, "fonts/static/ZxGamut-Bold.otf"): {Body: []byte("asset-bytes"), Size: 11},
 				},
 				errors: map[string]error{},
@@ -186,6 +264,135 @@ func TestPublishingProcessorFileStoreBuildsRootIndex(t *testing.T) {
 	}
 	if pkg.LatestVersion != "1.002" || pkg.LatestVersionKey != "1.002" {
 		t.Fatalf("unexpected root package entry: %+v", pkg)
+	}
+}
+
+func TestPublishingProcessorPublishFailuresAndLatestAliasBranch(t *testing.T) {
+	req, claims := validRequestAndClaims()
+	manifest := []byte(`{"name":"Example Sans","author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[{"path":"dist/ExampleSans-Regular.otf","style":"normal","weight":400}]}`)
+	tests := []struct {
+		name       string
+		processor  PublishingProcessor
+		wantCode   string
+		wantStatus int
+		checkBody  func(t *testing.T, body any)
+	}{
+		{
+			name:       "missing artifact store",
+			processor:  PublishingProcessor{},
+			wantCode:   "INTERNAL_ERROR",
+			wantStatus: 500,
+		},
+		{
+			name: "get versioned detail error",
+			processor: PublishingProcessor{
+				ValidationProcessor: newPublishingProcessor(t).ValidationProcessor,
+				ArtifactStore:       failingArtifactStore{base: artifacts.NewMemoryStore(), getVersionedErr: errors.New("boom")},
+				Clock:               fixedClock{t: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
+			},
+			wantCode:   "INTERNAL_ERROR",
+			wantStatus: 500,
+		},
+		{
+			name: "authoritative write conflict",
+			processor: PublishingProcessor{
+				ValidationProcessor: newPublishingProcessor(t).ValidationProcessor,
+				ArtifactStore:       failingArtifactStore{base: artifacts.NewMemoryStore(), putVersionedErr: errors.New("boom")},
+				Clock:               fixedClock{t: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
+			},
+			wantCode:   "INDEX_CONFLICT",
+			wantStatus: 503,
+		},
+		{
+			name: "list package error",
+			processor: PublishingProcessor{
+				ValidationProcessor: newPublishingProcessor(t).ValidationProcessor,
+				ArtifactStore:       failingArtifactStore{base: artifacts.NewMemoryStore(), listPackageErr: errors.New("boom")},
+				Clock:               fixedClock{t: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
+			},
+			wantCode:   "INTERNAL_ERROR",
+			wantStatus: 500,
+		},
+		{
+			name: "root index write failure after package index success",
+			processor: PublishingProcessor{
+				ValidationProcessor: newPublishingProcessor(t).ValidationProcessor,
+				ArtifactStore:       failingArtifactStore{base: artifacts.NewMemoryStore(), putRootIndexErr: errors.New("boom")},
+				Clock:               fixedClock{t: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
+			},
+			wantCode:   "INDEX_CONFLICT",
+			wantStatus: 503,
+		},
+		{
+			name: "latest alias not updated for older publish",
+			processor: func() PublishingProcessor {
+				base := artifacts.NewMemoryStore()
+				newer := protocol.VersionedPackageDetail{
+					SchemaVersion: "1",
+					PackageID:     "example/family",
+					DisplayName:   "Example Sans",
+					Author:        "Example Studio",
+					License:       "OFL-1.1",
+					Version:       "1.10.0",
+					VersionKey:    "1.10.0",
+					PublishedAt:   "2026-01-03T00:00:00Z",
+					GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "89abcdef0123456789abcdef0123456789abcdef"},
+					ManifestURL:   "https://raw.githubusercontent.com/example/family/89abcdef0123456789abcdef0123456789abcdef/fontpub.json",
+					Assets:        []protocol.VersionedAsset{{Path: "dist/ExampleSans-Regular.otf", URL: "https://raw.githubusercontent.com/example/family/89abcdef0123456789abcdef0123456789abcdef/dist/ExampleSans-Regular.otf", SHA256: "abc", Format: "otf", Style: "normal", Weight: 400, SizeBytes: 11}},
+				}
+				body, err := protocol.MarshalCanonical(newer)
+				if err != nil {
+					t.Fatalf("MarshalCanonical: %v", err)
+				}
+				if err := base.PutVersionedPackageDetail(context.Background(), newer, body, "etag"); err != nil {
+					t.Fatalf("PutVersionedPackageDetail: %v", err)
+				}
+				return PublishingProcessor{
+					ValidationProcessor: ValidationProcessor{
+						State: state.NewMemoryStore(),
+						Fetcher: fakeFetcher{
+							results: map[string]githubraw.Result{
+								mustManifestURL(t, req):                              {Body: manifest, Size: int64(len(manifest))},
+								mustAssetURL(t, req, "dist/ExampleSans-Regular.otf"): {Body: []byte("asset-bytes"), Size: 11},
+							},
+						},
+					},
+					ArtifactStore: base,
+					Clock:         fixedClock{t: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)},
+				}
+			}(),
+			wantStatus: 200,
+			checkBody: func(t *testing.T, body any) {
+				t.Helper()
+				resp := body.(map[string]any)
+				latest := resp["artifacts"].(map[string]any)["latest_package_alias"].(map[string]any)
+				if latest["updated"] != false {
+					t.Fatalf("expected latest alias to remain unchanged: %#v", latest)
+				}
+				if _, ok := latest["etag"]; ok {
+					t.Fatalf("unexpected etag on unchanged latest alias: %#v", latest)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			status, body := tc.processor.Process(context.Background(), req, claims)
+			if status != tc.wantStatus {
+				t.Fatalf("status=%d want=%d body=%#v", status, tc.wantStatus, body)
+			}
+			if tc.wantCode != "" {
+				env := body.(protocol.ErrorEnvelope)
+				if env.Error.Code != tc.wantCode {
+					t.Fatalf("unexpected error code: %s", env.Error.Code)
+				}
+				return
+			}
+			if tc.checkBody != nil {
+				tc.checkBody(t, body)
+			}
+		})
 	}
 }
 

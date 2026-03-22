@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,6 +52,12 @@ func TestParseUpdateRequest(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 		},
 		{
+			name:       "empty body",
+			body:       ``,
+			wantCode:   "REQUEST_INVALID_JSON",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
 			name:       "missing field",
 			body:       `{"repository":"example/family","sha":"0123456789abcdef0123456789abcdef01234567"}`,
 			wantCode:   "REQUEST_SCHEMA_INVALID",
@@ -65,6 +72,18 @@ func TestParseUpdateRequest(t *testing.T) {
 		{
 			name:       "invalid sha",
 			body:       `{"repository":"example/family","sha":"not-a-sha","ref":"refs/tags/v1.2.3"}`,
+			wantCode:   "REQUEST_SCHEMA_INVALID",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "multiple objects",
+			body:       `{"repository":"example/family","sha":"0123456789abcdef0123456789abcdef01234567","ref":"refs/tags/v1.2.3"}{"next":true}`,
+			wantCode:   "REQUEST_SCHEMA_INVALID",
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "trailing garbage",
+			body:       `{"repository":"example/family","sha":"0123456789abcdef0123456789abcdef01234567","ref":"refs/tags/v1.2.3"}oops`,
 			wantCode:   "REQUEST_SCHEMA_INVALID",
 			wantStatus: http.StatusBadRequest,
 		},
@@ -225,6 +244,39 @@ func TestHandlerAuthFlow(t *testing.T) {
 	}
 }
 
+func TestHandlerReturnsNotImplementedWhenProcessorIsNil(t *testing.T) {
+	validBody := `{"repository":"example/family","sha":"0123456789abcdef0123456789abcdef01234567","ref":"refs/tags/v1.2.3"}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/update", strings.NewReader(validBody))
+	req.Header.Set("Authorization", "Bearer token-1")
+	server := Server{
+		Verifier: fakeVerifier{claims: protocol.OIDCClaims{
+			Sub:             "repo:example/family:ref:refs/tags/v1.2.3",
+			Repository:      "example/family",
+			RepositoryID:    "123456789",
+			RepositoryOwner: "example",
+			SHA:             "0123456789abcdef0123456789abcdef01234567",
+			Ref:             "refs/tags/v1.2.3",
+			WorkflowRef:     "example/family/.github/workflows/fontpub.yml@refs/heads/main",
+			WorkflowSHA:     "89abcdef0123456789abcdef0123456789abcdef",
+			JTI:             "jwt-id-1",
+			EventName:       "push",
+		}},
+	}
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotImplemented {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestVerifyClaimsWithoutVerifierFails(t *testing.T) {
+	server := Server{}
+	_, errObj, status := server.verifyClaims(context.Background(), "token")
+	if errObj == nil || errObj.Code != "INTERNAL_ERROR" || status != http.StatusInternalServerError {
+		t.Fatalf("unexpected result err=%#v status=%d", errObj, status)
+	}
+}
+
 func TestHandlerRoutes(t *testing.T) {
 	server := Server{}
 	h := server.Handler()
@@ -248,6 +300,43 @@ func TestHandlerRoutes(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("unexpected healthz status: %d", rr.Code)
+	}
+}
+
+func TestStatusFromProtocolErrorAndHelpers(t *testing.T) {
+	if got := statusFromProtocolError("AUTH_CLAIMS_MISSING: missing"); got != http.StatusUnauthorized {
+		t.Fatalf("unexpected auth missing status: %d", got)
+	}
+	if got := statusFromProtocolError("AUTH_CLAIMS_MISMATCH: mismatch"); got != http.StatusBadRequest {
+		t.Fatalf("unexpected auth mismatch status: %d", got)
+	}
+	if got := statusFromProtocolError("WORKFLOW_NOT_ALLOWED: workflow"); got != http.StatusForbidden {
+		t.Fatalf("unexpected workflow status: %d", got)
+	}
+	if got := statusFromProtocolError("something else"); got != http.StatusUnauthorized {
+		t.Fatalf("unexpected default status: %d", got)
+	}
+	if got := codeFromProtocolError("AUTH_CLAIMS_MISSING: missing"); got != "AUTH_CLAIMS_MISSING" {
+		t.Fatalf("unexpected protocol code: %s", got)
+	}
+}
+
+func TestNotImplementedProcessorAndStaticVerifier(t *testing.T) {
+	status, body := NotImplementedProcessor{}.Process(context.Background(), UpdateRequest{}, protocol.OIDCClaims{})
+	if status != http.StatusNotImplemented {
+		t.Fatalf("unexpected status: %d", status)
+	}
+	env, ok := body.(protocol.ErrorEnvelope)
+	if !ok || env.Error.Code != "INTERNAL_ERROR" {
+		t.Fatalf("unexpected body: %#v", body)
+	}
+
+	if _, err := (StaticVerifier{}).Verify(context.Background(), "token"); err == nil {
+		t.Fatalf("expected static verifier error")
+	}
+	sentinel := errors.New("boom")
+	if _, err := (StaticVerifier{Err: sentinel}).Verify(context.Background(), "token"); !errors.Is(err, sentinel) {
+		t.Fatalf("unexpected verifier error: %v", err)
 	}
 }
 

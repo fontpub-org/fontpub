@@ -26,6 +26,19 @@ func (f fakeFetcher) Fetch(_ context.Context, url string, _ int64) (githubraw.Re
 	return githubraw.Result{}, githubraw.ErrNotFound
 }
 
+type failingStateStore struct {
+	replayErr    error
+	ownershipErr error
+}
+
+func (s failingStateStore) CheckAndReserveJTI(context.Context, string) error {
+	return s.replayErr
+}
+
+func (s failingStateStore) CheckOrBindPackage(context.Context, string, string) error {
+	return s.ownershipErr
+}
+
 func TestValidationProcessorValidate(t *testing.T) {
 	claims := protocol.OIDCClaims{
 		Sub:             "repo:example/family:ref:refs/tags/v1.2.3",
@@ -184,6 +197,162 @@ func TestValidationProcessorValidate(t *testing.T) {
 	}
 }
 
+func TestValidationProcessorValidateInfrastructureAndMappingFailures(t *testing.T) {
+	req := UpdateRequest{
+		Repository: "example/family",
+		SHA:        "0123456789abcdef0123456789abcdef01234567",
+		Ref:        "refs/tags/v1.2.3",
+	}
+	claims := protocol.OIDCClaims{
+		Sub:             "repo:example/family:ref:refs/tags/v1.2.3",
+		Repository:      "example/family",
+		RepositoryID:    "123456789",
+		RepositoryOwner: "example",
+		SHA:             req.SHA,
+		Ref:             req.Ref,
+		WorkflowRef:     "example/family/.github/workflows/fontpub.yml@refs/heads/main",
+		WorkflowSHA:     "89abcdef0123456789abcdef0123456789abcdef",
+		JTI:             "jwt-id-1",
+		EventName:       "push",
+	}
+	manifestURL, _ := githubraw.BuildManifestURL(req.Repository, req.SHA)
+	assetURL, _ := githubraw.BuildAssetURL(req.Repository, req.SHA, "dist/ExampleSans-Regular.otf")
+	validManifest := []byte(`{"name":"Example Sans","author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[{"path":"dist/ExampleSans-Regular.otf","style":"normal","weight":400}]}`)
+
+	tests := []struct {
+		name       string
+		processor  ValidationProcessor
+		req        UpdateRequest
+		wantCode   string
+		wantStatus int
+	}{
+		{
+			name:       "missing state store",
+			processor:  ValidationProcessor{},
+			req:        req,
+			wantCode:   "INTERNAL_ERROR",
+			wantStatus: 500,
+		},
+		{
+			name:       "missing fetcher",
+			processor:  ValidationProcessor{State: state.NewMemoryStore()},
+			req:        req,
+			wantCode:   "INTERNAL_ERROR",
+			wantStatus: 500,
+		},
+		{
+			name:       "state replay error",
+			processor:  ValidationProcessor{State: failingStateStore{replayErr: errors.New("boom")}, Fetcher: fakeFetcher{}},
+			req:        req,
+			wantCode:   "INTERNAL_ERROR",
+			wantStatus: 500,
+		},
+		{
+			name:       "state ownership error",
+			processor:  ValidationProcessor{State: failingStateStore{ownershipErr: errors.New("boom")}, Fetcher: fakeFetcher{}},
+			req:        req,
+			wantCode:   "INTERNAL_ERROR",
+			wantStatus: 500,
+		},
+		{
+			name:       "invalid repository",
+			processor:  ValidationProcessor{State: state.NewMemoryStore(), Fetcher: fakeFetcher{}},
+			req:        UpdateRequest{Repository: "example", SHA: req.SHA, Ref: req.Ref},
+			wantCode:   "REQUEST_SCHEMA_INVALID",
+			wantStatus: 400,
+		},
+		{
+			name: "manifest too large",
+			processor: ValidationProcessor{
+				State:   state.NewMemoryStore(),
+				Fetcher: fakeFetcher{errors: map[string]error{manifestURL: githubraw.ErrTooLarge}},
+			},
+			req:        req,
+			wantCode:   "MANIFEST_TOO_LARGE",
+			wantStatus: 413,
+		},
+		{
+			name: "asset fetch generic failure",
+			processor: ValidationProcessor{
+				State: state.NewMemoryStore(),
+				Fetcher: fakeFetcher{
+					results: map[string]githubraw.Result{manifestURL: {Body: validManifest, Size: int64(len(validManifest))}},
+					errors:  map[string]error{assetURL: errors.New("boom")},
+				},
+			},
+			req:        req,
+			wantCode:   "UPSTREAM_FETCH_FAILED",
+			wantStatus: 502,
+		},
+		{
+			name: "manifest schema invalid",
+			processor: ValidationProcessor{
+				State: state.NewMemoryStore(),
+				Fetcher: fakeFetcher{
+					results: map[string]githubraw.Result{
+						manifestURL: {Body: []byte(`{"author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[{"path":"dist/ExampleSans-Regular.otf","style":"normal","weight":400}]}`), Size: 150},
+					},
+				},
+			},
+			req:        req,
+			wantCode:   "MANIFEST_SCHEMA_INVALID",
+			wantStatus: 422,
+		},
+		{
+			name: "asset path invalid",
+			processor: ValidationProcessor{
+				State: state.NewMemoryStore(),
+				Fetcher: fakeFetcher{
+					results: map[string]githubraw.Result{
+						manifestURL: {Body: []byte(`{"name":"Example Sans","author":"Example Studio","version":"1.2.3","license":"OFL-1.1","files":[{"path":"../escape.otf","style":"normal","weight":400}]}`), Size: 150},
+					},
+				},
+			},
+			req:        req,
+			wantCode:   "ASSET_PATH_INVALID",
+			wantStatus: 422,
+		},
+		{
+			name: "invalid tag version",
+			processor: ValidationProcessor{
+				State: state.NewMemoryStore(),
+				Fetcher: fakeFetcher{
+					results: map[string]githubraw.Result{manifestURL: {Body: validManifest, Size: int64(len(validManifest))}},
+				},
+			},
+			req:        UpdateRequest{Repository: req.Repository, SHA: req.SHA, Ref: "refs/tags/not-a-version"},
+			wantCode:   "TAG_VERSION_MISMATCH",
+			wantStatus: 422,
+		},
+		{
+			name: "invalid manifest version",
+			processor: ValidationProcessor{
+				State: state.NewMemoryStore(),
+				Fetcher: fakeFetcher{
+					results: map[string]githubraw.Result{
+						manifestURL: {Body: []byte(`{"name":"Example Sans","author":"Example Studio","version":"not-a-version","license":"OFL-1.1","files":[{"path":"dist/ExampleSans-Regular.otf","style":"normal","weight":400}]}`), Size: 160},
+					},
+				},
+			},
+			req:        req,
+			wantCode:   "VERSION_INVALID",
+			wantStatus: 422,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, errObj, status := tc.processor.Validate(context.Background(), tc.req, claims)
+			if errObj == nil {
+				t.Fatalf("expected error")
+			}
+			if errObj.Code != tc.wantCode || status != tc.wantStatus {
+				t.Fatalf("got code=%s status=%d want code=%s status=%d", errObj.Code, status, tc.wantCode, tc.wantStatus)
+			}
+		})
+	}
+}
+
 func seededReplayStore(t *testing.T, jti string) state.Store {
 	t.Helper()
 	store := state.NewMemoryStore()
@@ -256,6 +425,16 @@ func TestMapFetchErrorFallback(t *testing.T) {
 	errObj := mapFetchError(errors.New("boom"), true)
 	if errObj.Code != "UPSTREAM_FETCH_FAILED" {
 		t.Fatalf("unexpected code: %s", errObj.Code)
+	}
+}
+
+func TestMapProtocolValidationErrorAndStatus(t *testing.T) {
+	errObj := mapProtocolValidationError(errors.New("ASSET_FORMAT_NOT_ALLOWED: bad format"))
+	if errObj.Code != "ASSET_FORMAT_NOT_ALLOWED" {
+		t.Fatalf("unexpected code: %s", errObj.Code)
+	}
+	if got := mapValidationStatus(errors.New("LICENSE_NOT_ALLOWED: bad license")); got != 422 {
+		t.Fatalf("unexpected validation status: %d", got)
 	}
 }
 
