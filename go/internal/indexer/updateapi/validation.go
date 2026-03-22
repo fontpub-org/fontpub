@@ -86,64 +86,17 @@ func (p ValidationProcessor) Validate(ctx context.Context, req UpdateRequest, cl
 	if err != nil {
 		return ValidationResult{}, errorObject("REQUEST_SCHEMA_INVALID", "invalid repository", nil), http.StatusBadRequest
 	}
-	manifestResult, err := p.Fetcher.Fetch(ctx, manifestURL, ManifestMaxBytes)
-	if err != nil {
-		return ValidationResult{}, mapFetchError(err, true), mapFetchStatus(err)
+	manifest, errObj, status := p.fetchManifest(ctx, manifestURL)
+	if errObj != nil {
+		return ValidationResult{}, errObj, status
 	}
-
-	var manifest protocol.Manifest
-	if err := json.Unmarshal(manifestResult.Body, &manifest); err != nil {
-		return ValidationResult{}, errorObject("MANIFEST_INVALID_JSON", "manifest is not valid JSON", nil), http.StatusUnprocessableEntity
+	manifestVersionKey, errObj, status := validateVersionKeys(req.Ref, manifest.Version)
+	if errObj != nil {
+		return ValidationResult{}, errObj, status
 	}
-	if err := protocol.ValidateManifest(manifest); err != nil {
-		return ValidationResult{}, mapProtocolValidationError(err), mapValidationStatus(err)
-	}
-
-	tag := strings.TrimPrefix(req.Ref, "refs/tags/")
-	tagVersionKey, err := protocol.NormalizeVersionKey(tag)
-	if err != nil {
-		return ValidationResult{}, errorObject("TAG_VERSION_MISMATCH", "tag version is invalid", nil), http.StatusUnprocessableEntity
-	}
-	manifestVersionKey, err := protocol.NormalizeVersionKey(manifest.Version)
-	if err != nil {
-		return ValidationResult{}, errorObject("VERSION_INVALID", "manifest version is invalid", nil), http.StatusUnprocessableEntity
-	}
-	if tagVersionKey != manifestVersionKey {
-		return ValidationResult{}, errorObject("TAG_VERSION_MISMATCH", "tag version does not match manifest version key", nil), http.StatusUnprocessableEntity
-	}
-
-	var totalBytes int64
-	assets := make([]ValidatedAsset, 0, len(manifest.Files))
-	for _, file := range protocol.SortedManifestFiles(manifest.Files) {
-		assetURL, err := githubraw.BuildAssetURL(req.Repository, req.SHA, file.Path)
-		if err != nil {
-			return ValidationResult{}, mapProtocolValidationError(err), mapValidationStatus(err)
-		}
-		assetResult, err := p.Fetcher.Fetch(ctx, assetURL, AssetMaxBytes)
-		if err != nil {
-			return ValidationResult{}, mapFetchError(err, false), mapFetchStatus(err)
-		}
-		if assetResult.Size > AssetMaxBytes {
-			return ValidationResult{}, errorObject("ASSET_TOO_LARGE", "asset exceeds size limit", map[string]any{"path": file.Path}), http.StatusRequestEntityTooLarge
-		}
-		totalBytes += assetResult.Size
-		if totalBytes > PackageMaxBytes {
-			return ValidationResult{}, errorObject("PACKAGE_TOO_LARGE", "package exceeds size limit", nil), http.StatusRequestEntityTooLarge
-		}
-		sum := sha256.Sum256(assetResult.Body)
-		format, err := protocol.FormatFromPath(file.Path)
-		if err != nil {
-			return ValidationResult{}, mapProtocolValidationError(err), mapValidationStatus(err)
-		}
-		assets = append(assets, ValidatedAsset{
-			Path:      file.Path,
-			URL:       assetURL,
-			SHA256:    hex.EncodeToString(sum[:]),
-			Format:    format,
-			Style:     file.Style,
-			Weight:    file.Weight,
-			SizeBytes: assetResult.Size,
-		})
+	assets, errObj, status := p.fetchValidatedAssets(ctx, req, manifest)
+	if errObj != nil {
+		return ValidationResult{}, errObj, status
 	}
 
 	return ValidationResult{
@@ -153,6 +106,86 @@ func (p ValidationProcessor) Validate(ctx context.Context, req UpdateRequest, cl
 		ManifestURL: manifestURL,
 		Manifest:    manifest,
 		Assets:      assets,
+	}, nil, http.StatusOK
+}
+
+func (p ValidationProcessor) fetchManifest(ctx context.Context, manifestURL string) (protocol.Manifest, *protocol.ErrorObject, int) {
+	manifestResult, err := p.Fetcher.Fetch(ctx, manifestURL, ManifestMaxBytes)
+	if err != nil {
+		return protocol.Manifest{}, mapFetchError(err, true), mapFetchStatus(err)
+	}
+
+	var manifest protocol.Manifest
+	if err := json.Unmarshal(manifestResult.Body, &manifest); err != nil {
+		return protocol.Manifest{}, errorObject("MANIFEST_INVALID_JSON", "manifest is not valid JSON", nil), http.StatusUnprocessableEntity
+	}
+	if err := protocol.ValidateManifest(manifest); err != nil {
+		return protocol.Manifest{}, mapProtocolValidationError(err), mapValidationStatus(err)
+	}
+	return manifest, nil, http.StatusOK
+}
+
+func validateVersionKeys(ref, manifestVersion string) (string, *protocol.ErrorObject, int) {
+	tag := strings.TrimPrefix(ref, "refs/tags/")
+	tagVersionKey, err := protocol.NormalizeVersionKey(tag)
+	if err != nil {
+		return "", errorObject("TAG_VERSION_MISMATCH", "tag version is invalid", nil), http.StatusUnprocessableEntity
+	}
+	manifestVersionKey, err := protocol.NormalizeVersionKey(manifestVersion)
+	if err != nil {
+		return "", errorObject("VERSION_INVALID", "manifest version is invalid", nil), http.StatusUnprocessableEntity
+	}
+	if tagVersionKey != manifestVersionKey {
+		return "", errorObject("TAG_VERSION_MISMATCH", "tag version does not match manifest version key", nil), http.StatusUnprocessableEntity
+	}
+	return manifestVersionKey, nil, http.StatusOK
+}
+
+func (p ValidationProcessor) fetchValidatedAssets(ctx context.Context, req UpdateRequest, manifest protocol.Manifest) ([]ValidatedAsset, *protocol.ErrorObject, int) {
+	var totalBytes int64
+	assets := make([]ValidatedAsset, 0, len(manifest.Files))
+	for _, file := range protocol.SortedManifestFiles(manifest.Files) {
+		asset, errObj, status := p.fetchValidatedAsset(ctx, req, file, totalBytes)
+		if errObj != nil {
+			return nil, errObj, status
+		}
+		totalBytes += asset.SizeBytes
+		if totalBytes > PackageMaxBytes {
+			return nil, errorObject("PACKAGE_TOO_LARGE", "package exceeds size limit", nil), http.StatusRequestEntityTooLarge
+		}
+		assets = append(assets, asset)
+	}
+	return assets, nil, http.StatusOK
+}
+
+func (p ValidationProcessor) fetchValidatedAsset(ctx context.Context, req UpdateRequest, file protocol.ManifestFile, currentTotalBytes int64) (ValidatedAsset, *protocol.ErrorObject, int) {
+	assetURL, err := githubraw.BuildAssetURL(req.Repository, req.SHA, file.Path)
+	if err != nil {
+		return ValidatedAsset{}, mapProtocolValidationError(err), mapValidationStatus(err)
+	}
+	assetResult, err := p.Fetcher.Fetch(ctx, assetURL, AssetMaxBytes)
+	if err != nil {
+		return ValidatedAsset{}, mapFetchError(err, false), mapFetchStatus(err)
+	}
+	if assetResult.Size > AssetMaxBytes {
+		return ValidatedAsset{}, errorObject("ASSET_TOO_LARGE", "asset exceeds size limit", map[string]any{"path": file.Path}), http.StatusRequestEntityTooLarge
+	}
+	if currentTotalBytes+assetResult.Size > PackageMaxBytes {
+		return ValidatedAsset{}, errorObject("PACKAGE_TOO_LARGE", "package exceeds size limit", nil), http.StatusRequestEntityTooLarge
+	}
+	sum := sha256.Sum256(assetResult.Body)
+	format, err := protocol.FormatFromPath(file.Path)
+	if err != nil {
+		return ValidatedAsset{}, mapProtocolValidationError(err), mapValidationStatus(err)
+	}
+	return ValidatedAsset{
+		Path:      file.Path,
+		URL:       assetURL,
+		SHA256:    hex.EncodeToString(sum[:]),
+		Format:    format,
+		Style:     file.Style,
+		Weight:    file.Weight,
+		SizeBytes: assetResult.Size,
 	}, nil, http.StatusOK
 }
 
@@ -193,8 +226,7 @@ func mapFetchStatus(err error) int {
 }
 
 func mapProtocolValidationError(err error) *protocol.ErrorObject {
-	message := err.Error()
-	code := strings.TrimSpace(strings.SplitN(message, ":", 2)[0])
+	message, code := protocolValidationError(err)
 	switch code {
 	case "LICENSE_NOT_ALLOWED", "VERSION_INVALID", "ASSET_PATH_INVALID", "ASSET_FORMAT_NOT_ALLOWED", "ASSET_DUPLICATE_PATH":
 		return errorObject(code, message, nil)
@@ -204,11 +236,17 @@ func mapProtocolValidationError(err error) *protocol.ErrorObject {
 }
 
 func mapValidationStatus(err error) int {
-	code := strings.TrimSpace(strings.SplitN(err.Error(), ":", 2)[0])
+	_, code := protocolValidationError(err)
 	switch code {
 	case "LICENSE_NOT_ALLOWED", "VERSION_INVALID", "ASSET_PATH_INVALID", "ASSET_FORMAT_NOT_ALLOWED", "ASSET_DUPLICATE_PATH":
 		return http.StatusUnprocessableEntity
 	default:
 		return http.StatusUnprocessableEntity
 	}
+}
+
+func protocolValidationError(err error) (message, code string) {
+	message = err.Error()
+	code = strings.TrimSpace(strings.SplitN(message, ":", 2)[0])
+	return message, code
 }

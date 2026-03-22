@@ -45,67 +45,98 @@ func (p PublishingProcessor) Publish(ctx context.Context, req UpdateRequest, val
 	if p.ArtifactStore == nil {
 		return nil, internalError("artifact store is not configured"), http.StatusInternalServerError
 	}
-	clock := p.Clock
-	if clock == nil {
-		clock = RealClock{}
+	clock := p.publishClock()
+
+	detail, detailBytes, detailETag, errObj, status := p.loadOrCreateVersionedDetail(ctx, req, validated, clock.Now().UTC().Format(time.RFC3339))
+	if errObj != nil {
+		return nil, errObj, status
 	}
 
+	packageWrite, errObj, status := p.writePackageDerivedDocs(ctx, validated.PackageID)
+	if errObj != nil {
+		return nil, errObj, status
+	}
+	rootIndexETag, errObj, status := p.writeRootDerivedDocs(ctx)
+	if errObj != nil {
+		return nil, errObj, status
+	}
+
+	return buildPublishResponse(detail, detailBytes, detailETag, packageWrite, rootIndexETag), nil, http.StatusOK
+}
+
+func (p PublishingProcessor) publishClock() Clock {
+	if p.Clock != nil {
+		return p.Clock
+	}
+	return RealClock{}
+}
+
+func (p PublishingProcessor) loadOrCreateVersionedDetail(ctx context.Context, req UpdateRequest, validated ValidationResult, now string) (protocol.VersionedPackageDetail, []byte, string, *protocol.ErrorObject, int) {
 	existing, found, err := p.ArtifactStore.GetVersionedPackageDetail(ctx, validated.PackageID, validated.VersionKey)
 	if err != nil {
-		return nil, internalError(err.Error()), http.StatusInternalServerError
+		return protocol.VersionedPackageDetail{}, nil, "", internalError(err.Error()), http.StatusInternalServerError
 	}
-
-	var detail protocol.VersionedPackageDetail
-	var detailBytes []byte
-	var detailETag string
-	now := clock.Now().UTC().Format(time.RFC3339)
 
 	if found {
 		candidate := buildVersionedPackageDetail(validated, req, existing.PublishedAt)
 		if !protocol.ImmutableEqual(existing, candidate) {
-			return nil, errorObject("IMMUTABLE_VERSION", "published version differs in immutable fields", nil), http.StatusConflict
+			return protocol.VersionedPackageDetail{}, nil, "", errorObject("IMMUTABLE_VERSION", "published version differs in immutable fields", nil), http.StatusConflict
 		}
-		detail = existing
-		if detailBytes, err = protocol.MarshalCanonical(detail); err != nil {
-			return nil, internalError(err.Error()), http.StatusInternalServerError
+		detailBytes, err := protocol.MarshalCanonical(existing)
+		if err != nil {
+			return protocol.VersionedPackageDetail{}, nil, "", internalError(err.Error()), http.StatusInternalServerError
 		}
-		detailETag = derive.ComputeETag(detailBytes)
-	} else {
-		detail = buildVersionedPackageDetail(validated, req, now)
-		if detailBytes, err = protocol.MarshalCanonical(detail); err != nil {
-			return nil, internalError(err.Error()), http.StatusInternalServerError
-		}
-		detailETag = derive.ComputeETag(detailBytes)
-		if err := p.ArtifactStore.PutVersionedPackageDetail(ctx, detail, detailBytes, detailETag); err != nil {
-			return nil, indexConflict(err), http.StatusServiceUnavailable
-		}
+		return existing, detailBytes, derive.ComputeETag(detailBytes), nil, http.StatusOK
 	}
 
-	packageDetails, err := p.ArtifactStore.ListPackageVersionedPackageDetails(ctx, validated.PackageID)
+	detail := buildVersionedPackageDetail(validated, req, now)
+	detailBytes, err := protocol.MarshalCanonical(detail)
 	if err != nil {
-		return nil, internalError(err.Error()), http.StatusInternalServerError
+		return protocol.VersionedPackageDetail{}, nil, "", internalError(err.Error()), http.StatusInternalServerError
 	}
-	packageWrite, err := deriveddocs.WritePackage(ctx, p.ArtifactStore, validated.PackageID, packageDetails)
+	detailETag := derive.ComputeETag(detailBytes)
+	if err := p.ArtifactStore.PutVersionedPackageDetail(ctx, detail, detailBytes, detailETag); err != nil {
+		return protocol.VersionedPackageDetail{}, nil, "", indexConflict(err), http.StatusServiceUnavailable
+	}
+	return detail, detailBytes, detailETag, nil, http.StatusOK
+}
+
+func (p PublishingProcessor) writePackageDerivedDocs(ctx context.Context, packageID string) (deriveddocs.PackageWriteResult, *protocol.ErrorObject, int) {
+	packageDetails, err := p.ArtifactStore.ListPackageVersionedPackageDetails(ctx, packageID)
 	if err != nil {
-		return nil, indexConflict(err), http.StatusServiceUnavailable
+		return deriveddocs.PackageWriteResult{}, internalError(err.Error()), http.StatusInternalServerError
 	}
-
-	latestAliasUpdated := packageWrite.LatestDetail.VersionKey == detail.VersionKey
-	latestAliasETag := ""
-	if latestAliasUpdated {
-		latestAliasETag = packageWrite.LatestAliasETag
+	packageWrite, err := deriveddocs.WritePackage(ctx, p.ArtifactStore, packageID, packageDetails)
+	if err != nil {
+		return deriveddocs.PackageWriteResult{}, indexConflict(err), http.StatusServiceUnavailable
 	}
+	return packageWrite, nil, http.StatusOK
+}
 
+func (p PublishingProcessor) writeRootDerivedDocs(ctx context.Context) (string, *protocol.ErrorObject, int) {
 	allDetails, err := p.ArtifactStore.ListAllVersionedPackageDetails(ctx)
 	if err != nil {
-		return nil, internalError(err.Error()), http.StatusInternalServerError
+		return "", internalError(err.Error()), http.StatusInternalServerError
 	}
 	rootIndexETag, err := deriveddocs.WriteRoot(ctx, p.ArtifactStore, allDetails)
 	if err != nil {
-		return nil, indexConflict(err), http.StatusServiceUnavailable
+		return "", indexConflict(err), http.StatusServiceUnavailable
+	}
+	return rootIndexETag, nil, http.StatusOK
+}
+
+func buildPublishResponse(detail protocol.VersionedPackageDetail, detailBytes []byte, detailETag string, packageWrite deriveddocs.PackageWriteResult, rootIndexETag string) map[string]any {
+	_ = detailBytes
+	latestAliasUpdated := packageWrite.LatestDetail.VersionKey == detail.VersionKey
+	latestAlias := map[string]any{
+		"path":    artifacts.LatestAliasPath(detail.PackageID),
+		"updated": latestAliasUpdated,
+	}
+	if latestAliasUpdated {
+		latestAlias["etag"] = packageWrite.LatestAliasETag
 	}
 
-	response := map[string]any{
+	return map[string]any{
 		"status":      "ok",
 		"package_id":  detail.PackageID,
 		"version":     detail.Version,
@@ -120,20 +151,13 @@ func (p PublishingProcessor) Publish(ctx context.Context, req UpdateRequest, val
 				"path": artifacts.PackageVersionsIndexPath(detail.PackageID),
 				"etag": packageWrite.PackageIndexETag,
 			},
-			"latest_package_alias": map[string]any{
-				"path":    artifacts.LatestAliasPath(detail.PackageID),
-				"updated": latestAliasUpdated,
-			},
+			"latest_package_alias": latestAlias,
 			"root_index": map[string]any{
 				"path": artifacts.RootIndexPath(),
 				"etag": rootIndexETag,
 			},
 		},
 	}
-	if latestAliasUpdated {
-		response["artifacts"].(map[string]any)["latest_package_alias"].(map[string]any)["etag"] = latestAliasETag
-	}
-	return response, nil, http.StatusOK
 }
 
 func buildVersionedPackageDetail(validated ValidationResult, req UpdateRequest, publishedAt string) protocol.VersionedPackageDetail {
