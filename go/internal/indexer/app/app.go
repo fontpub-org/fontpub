@@ -70,7 +70,8 @@ func LoadConfig(ctx context.Context, getenv func(string) string) (Config, error)
 
 func (a App) Handler() http.Handler {
 	server := updateapi.Server{
-		Verifier: a.Config.Verifier,
+		Verifier:      a.Config.Verifier,
+		ArtifactStore: a.Config.ArtifactStore,
 		Processor: updateapi.PublishingProcessor{
 			ValidationProcessor: updateapi.ValidationProcessor{
 				State:   a.Config.StateStore,

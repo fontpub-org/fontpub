@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/fontpub-org/fontpub/go/internal/indexer/artifacts"
 	"github.com/fontpub-org/fontpub/go/internal/indexer/httpx"
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
 )
@@ -31,14 +32,15 @@ type Processor interface {
 }
 
 type Server struct {
-	Verifier  Verifier
-	Processor Processor
+	Verifier      Verifier
+	Processor     Processor
+	ArtifactStore artifacts.Store
 }
 
 func (s Server) Handler() http.Handler {
 	mux := s.routes()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/healthz" && r.URL.Path != "/v1/update" {
+		if !isRoutablePath(r.URL.Path) {
 			s.writeRouteNotFound(w, r)
 			return
 		}
@@ -49,6 +51,8 @@ func (s Server) Handler() http.Handler {
 func (s Server) routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	mux.HandleFunc("/v1/index.json", s.handleRootIndex)
+	mux.HandleFunc("/v1/packages/", s.handlePackageRead)
 	mux.HandleFunc("/v1/update", s.handleUpdate)
 	return mux
 }
@@ -82,6 +86,7 @@ func (s Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, body := s.Processor.Process(r.Context(), req, claims)
+	maybeSetRetryAfter(w, status, body)
 	httpx.WriteJSON(w, status, body)
 }
 
@@ -136,6 +141,24 @@ func methodAllowed(w http.ResponseWriter, r *http.Request, want string) bool {
 		"method": r.Method,
 	})
 	return false
+}
+
+func isRoutablePath(path string) bool {
+	return path == "/healthz" ||
+		path == "/v1/update" ||
+		path == "/v1/index.json" ||
+		strings.HasPrefix(path, "/v1/packages/")
+}
+
+func maybeSetRetryAfter(w http.ResponseWriter, status int, body any) {
+	if status != http.StatusServiceUnavailable {
+		return
+	}
+	env, ok := body.(protocol.ErrorEnvelope)
+	if !ok || env.Error.Code != "INDEX_CONFLICT" {
+		return
+	}
+	w.Header().Set("Retry-After", "1")
 }
 
 func ParseUpdateRequest(r io.Reader) (UpdateRequest, *protocol.ErrorObject, int) {
