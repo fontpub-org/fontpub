@@ -11,6 +11,8 @@ import (
 var humanErrorDetailOrder = []string{
 	"path",
 	"package_id",
+	"current_activation_dir",
+	"requested_activation_dir",
 	"version_key",
 	"version",
 	"flag",
@@ -135,6 +137,16 @@ func inputRequiredHints(command string, err *CLIError, details map[string]any) [
 	switch {
 	case strings.Contains(err.Message, "activation directory is required"):
 		return []string{"pass --activation-dir <path> or set FONTPUB_ACTIVATION_DIR"}
+	case err.Message == "package is active in a different activation directory":
+		packageID := stringValue(details["package_id"])
+		current := stringValue(details["current_activation_dir"])
+		if packageID != "" && current != "" {
+			return []string{
+				fmt.Sprintf("run: fontpub deactivate %s --activation-dir %s", packageID, current),
+				fmt.Sprintf("or rerun with --activation-dir %s", current),
+			}
+		}
+		return nil
 	case err.Message == "command is required":
 		return []string{"run: fontpub --help"}
 	case err.Message == "unknown command":

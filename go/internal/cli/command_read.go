@@ -209,6 +209,9 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 	if errObj != nil {
 		return a.fail("verify", errObj)
 	}
+	if opts.ActivationDir == "" {
+		opts.ActivationDir = a.Config.DefaultActivationDir
+	}
 	lock, ok, err := a.lockfileStore().Load()
 	if err != nil {
 		return a.fail("verify", asCLIError(err))
@@ -225,7 +228,7 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 					if finding := verifyLockedAsset(asset); finding != nil {
 						findings = append(findings, *finding)
 					}
-					if opts.ActivationDir != "" && asset.Active && asset.SymlinkPath != nil && filepath.Dir(*asset.SymlinkPath) != opts.ActivationDir {
+					if opts.ActivationDir != "" && asset.Active && asset.SymlinkPath != nil && filepath.Clean(filepath.Dir(*asset.SymlinkPath)) != filepath.Clean(opts.ActivationDir) {
 						findings = append(findings, Finding{
 							Code:     "ACTIVATION_BROKEN",
 							Severity: "error",

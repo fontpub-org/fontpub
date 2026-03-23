@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/fontpub-org/fontpub/go/internal/protocol"
@@ -20,6 +21,9 @@ func (a *App) activateVersion(lock *protocol.Lockfile, packageID, versionKey, ac
 	if !ok {
 		return nil, &CLIError{Code: "NOT_INSTALLED", Message: "requested version is not installed", Details: map[string]any{"package_id": packageID, "version_key": versionKey}}
 	}
+	if err := ensurePackageActivationDirMatch(packageID, pkg, activationDir); err != nil {
+		return nil, err
+	}
 	planned := make([]PlannedAction, 0)
 
 	for otherVersionKey, other := range pkg.InstalledVersions {
@@ -27,6 +31,9 @@ func (a *App) activateVersion(lock *protocol.Lockfile, packageID, versionKey, ac
 			continue
 		}
 		for i := range other.Assets {
+			if !assetSymlinkPathMatchesActivationDir(other.Assets[i], activationDir) {
+				continue
+			}
 			if other.Assets[i].SymlinkPath != nil {
 				planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: packageID, VersionKey: otherVersionKey, Path: other.Assets[i].Path})
 				if !dryRun {
@@ -56,6 +63,48 @@ func (a *App) activateVersion(lock *protocol.Lockfile, packageID, versionKey, ac
 	pkg.ActiveVersionKey = &versionKey
 	lock.Packages[packageID] = pkg
 	return planned, nil
+}
+
+func ensurePackageActivationDirMatch(packageID string, pkg protocol.LockedPackage, activationDir string) error {
+	dirs := activeAssetActivationDirs(pkg)
+	if len(dirs) == 0 {
+		return nil
+	}
+	requested := filepath.Clean(activationDir)
+	for _, dir := range dirs {
+		if dir != requested {
+			return &CLIError{
+				Code:    "INPUT_REQUIRED",
+				Message: "package is active in a different activation directory",
+				Details: map[string]any{
+					"package_id":               packageID,
+					"current_activation_dir":   strings.Join(dirs, ", "),
+					"requested_activation_dir": requested,
+				},
+			}
+		}
+	}
+	return nil
+}
+
+func activeAssetActivationDirs(pkg protocol.LockedPackage) []string {
+	seen := map[string]struct{}{}
+	dirs := make([]string, 0)
+	for _, version := range pkg.InstalledVersions {
+		for _, asset := range version.Assets {
+			if !asset.Active || asset.SymlinkPath == nil || *asset.SymlinkPath == "" {
+				continue
+			}
+			dir := filepath.Clean(filepath.Dir(*asset.SymlinkPath))
+			if _, ok := seen[dir]; ok {
+				continue
+			}
+			seen[dir] = struct{}{}
+			dirs = append(dirs, dir)
+		}
+	}
+	sort.Strings(dirs)
+	return dirs
 }
 
 func (a *App) deactivatePackage(lock *protocol.Lockfile, packageID, activationDir string, dryRun bool) ([]PlannedAction, bool, error) {

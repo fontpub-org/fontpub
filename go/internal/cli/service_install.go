@@ -24,6 +24,17 @@ func (a *App) installDetail(ctx context.Context, lock *protocol.Lockfile, detail
 	if pkg.InstalledVersions == nil {
 		pkg.InstalledVersions = map[string]protocol.InstalledVersion{}
 	}
+	if activate {
+		if activationDir == "" {
+			activationDir = a.Config.DefaultActivationDir
+		}
+		if activationDir == "" {
+			return false, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "activation directory is required for --activate", Details: map[string]any{"flag": "--activation-dir"}}
+		}
+		if err := ensurePackageActivationDirMatch(packageID, pkg, activationDir); err != nil {
+			return false, nil, err
+		}
+	}
 	planned := make([]PlannedAction, 0)
 	changed := false
 	if _, exists := pkg.InstalledVersions[detail.VersionKey]; !exists {
@@ -53,12 +64,6 @@ func (a *App) installDetail(ctx context.Context, lock *protocol.Lockfile, detail
 		changed = true
 	}
 	if activate {
-		if activationDir == "" {
-			activationDir = a.Config.DefaultActivationDir
-		}
-		if activationDir == "" {
-			return false, nil, &CLIError{Code: "INPUT_REQUIRED", Message: "activation directory is required for --activate", Details: map[string]any{"flag": "--activation-dir"}}
-		}
 		if dryRun {
 			installCopy := cloneLockfile(*lock)
 			pkgCopy := installCopy.Packages[packageID]

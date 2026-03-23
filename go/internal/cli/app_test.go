@@ -1233,6 +1233,240 @@ func TestUpdateInstallsLatestVersion(t *testing.T) {
 	}
 }
 
+func TestInstallActivateFailsBeforeDownloadWhenActiveInDifferentActivationDir(t *testing.T) {
+	stateDir := t.TempDir()
+	currentActivationDir := t.TempDir()
+	requestedActivationDir := t.TempDir()
+	local123 := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(local123), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(local123, []byte("old-font"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	currentSymlink := filepath.Join(currentActivationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(local123, currentSymlink); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	active := "1.2.3"
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: &active,
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:        "dist/ExampleSans-Regular.otf",
+							SHA256:      strings.Repeat("a", 64),
+							LocalPath:   local123,
+							Active:      true,
+							SymlinkPath: &currentSymlink,
+						}},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	downloadRequests := 0
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch req.URL.Path {
+				case "/v1/packages/example/family.json":
+					return jsonResponse(http.StatusOK, protocol.VersionedPackageDetail{
+						SchemaVersion: "1",
+						PackageID:     "example/family",
+						DisplayName:   "Example Sans",
+						Author:        "Example Studio",
+						License:       "OFL-1.1",
+						Version:       "1.3.0",
+						VersionKey:    "1.3",
+						PublishedAt:   "2026-01-03T00:00:00Z",
+						GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "89abcdef0123456789abcdef0123456789abcdef"},
+						ManifestURL:   "https://raw.githubusercontent.com/example/family/89abcdef0123456789abcdef0123456789abcdef/fontpub.json",
+						Assets: []protocol.VersionedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", URL: "https://assets.example/new-regular.otf", SHA256: strings.Repeat("b", 64), Format: "otf", Style: "normal", Weight: 400, SizeBytes: 8},
+						},
+					}), nil
+				case "/new-regular.otf":
+					downloadRequests++
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"Content-Type": []string{"application/octet-stream"}},
+						Body:       io.NopCloser(strings.NewReader("new-font")),
+					}, nil
+				default:
+					return jsonResponse(http.StatusNotFound, protocol.ErrorEnvelope{Error: protocol.ErrorObject{Code: "PACKAGE_NOT_FOUND", Message: "not found", Details: map[string]any{}}}), nil
+				}
+			}),
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: stateDir},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"install", "example/family", "--activate", "--activation-dir", requestedActivationDir, "--json"}); code == 0 {
+		t.Fatalf("expected install failure")
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if env.Error == nil || env.Error.Code != "INPUT_REQUIRED" || env.Error.Message != "package is active in a different activation directory" {
+		t.Fatalf("unexpected error envelope: %+v", env)
+	}
+	if downloadRequests != 0 {
+		t.Fatalf("expected no asset download, got %d", downloadRequests)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "packages", "example", "family", "1.3")); !os.IsNotExist(err) {
+		t.Fatalf("expected no new install root, err=%v", err)
+	}
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	if saved.Packages["example/family"].ActiveVersionKey == nil || *saved.Packages["example/family"].ActiveVersionKey != "1.2.3" {
+		t.Fatalf("unexpected active version after failed install: %#v", saved.Packages["example/family"].ActiveVersionKey)
+	}
+}
+
+func TestUpdateActivateFailsBeforeDownloadWhenActiveInDifferentActivationDir(t *testing.T) {
+	stateDir := t.TempDir()
+	currentActivationDir := t.TempDir()
+	requestedActivationDir := t.TempDir()
+	local123 := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(local123), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(local123, []byte("old-font"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	currentSymlink := filepath.Join(currentActivationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(local123, currentSymlink); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	active := "1.2.3"
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: &active,
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:        "dist/ExampleSans-Regular.otf",
+							SHA256:      strings.Repeat("a", 64),
+							LocalPath:   local123,
+							Active:      true,
+							SymlinkPath: &currentSymlink,
+						}},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	downloadRequests := 0
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				switch req.URL.Path {
+				case "/v1/index.json":
+					return jsonResponse(http.StatusOK, protocol.RootIndex{
+						SchemaVersion: "1",
+						GeneratedAt:   "2026-01-03T00:00:00Z",
+						Packages: map[string]protocol.RootIndexPackage{
+							"example/family": {LatestVersion: "1.3.0", LatestVersionKey: "1.3", LatestPublishedAt: "2026-01-03T00:00:00Z"},
+						},
+					}), nil
+				case "/v1/packages/example/family/versions/1.3.json":
+					return jsonResponse(http.StatusOK, protocol.VersionedPackageDetail{
+						SchemaVersion: "1",
+						PackageID:     "example/family",
+						DisplayName:   "Example Sans",
+						Author:        "Example Studio",
+						License:       "OFL-1.1",
+						Version:       "1.3.0",
+						VersionKey:    "1.3",
+						PublishedAt:   "2026-01-03T00:00:00Z",
+						GitHub:        protocol.GitHubRef{Owner: "example", Repo: "family", SHA: "89abcdef0123456789abcdef0123456789abcdef"},
+						ManifestURL:   "https://raw.githubusercontent.com/example/family/89abcdef0123456789abcdef0123456789abcdef/fontpub.json",
+						Assets: []protocol.VersionedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", URL: "https://assets.example/new-regular.otf", SHA256: strings.Repeat("b", 64), Format: "otf", Style: "normal", Weight: 400, SizeBytes: 8},
+						},
+					}), nil
+				case "/new-regular.otf":
+					downloadRequests++
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Header:     http.Header{"Content-Type": []string{"application/octet-stream"}},
+						Body:       io.NopCloser(strings.NewReader("new-font")),
+					}, nil
+				default:
+					return jsonResponse(http.StatusNotFound, protocol.ErrorEnvelope{Error: protocol.ErrorObject{Code: "PACKAGE_NOT_FOUND", Message: "not found", Details: map[string]any{}}}), nil
+				}
+			}),
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: stateDir},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"update", "example/family", "--activate", "--activation-dir", requestedActivationDir, "--json"}); code == 0 {
+		t.Fatalf("expected update failure")
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if env.Error == nil || env.Error.Code != "INPUT_REQUIRED" || env.Error.Message != "package is active in a different activation directory" {
+		t.Fatalf("unexpected error envelope: %+v", env)
+	}
+	if downloadRequests != 0 {
+		t.Fatalf("expected no asset download, got %d", downloadRequests)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "packages", "example", "family", "1.3")); !os.IsNotExist(err) {
+		t.Fatalf("expected no new install root, err=%v", err)
+	}
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	if saved.Packages["example/family"].ActiveVersionKey == nil || *saved.Packages["example/family"].ActiveVersionKey != "1.2.3" {
+		t.Fatalf("unexpected active version after failed update: %#v", saved.Packages["example/family"].ActiveVersionKey)
+	}
+}
+
 func TestNotInstalledErrorSuggestsInstall(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	app := App{
@@ -1681,6 +1915,98 @@ func TestActivateWithoutVersionFailsWhenInstalledVersionsAreAmbiguous(t *testing
 	}
 }
 
+func TestActivateFailsWhenPackageIsActiveInDifferentActivationDir(t *testing.T) {
+	stateDir := t.TempDir()
+	currentActivationDir := t.TempDir()
+	requestedActivationDir := t.TempDir()
+	local123 := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	local130 := filepath.Join(stateDir, "packages", "example", "family", "1.3", "dist", "ExampleSans-Regular.otf")
+	for _, path := range []string{local123, local130} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("os.MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("font-bytes"), 0o644); err != nil {
+			t.Fatalf("os.WriteFile: %v", err)
+		}
+	}
+	currentSymlink := filepath.Join(currentActivationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(local123, currentSymlink); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	active := "1.2.3"
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: &active,
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:        "dist/ExampleSans-Regular.otf",
+							SHA256:      strings.Repeat("a", 64),
+							LocalPath:   local123,
+							Active:      true,
+							SymlinkPath: &currentSymlink,
+						}},
+					},
+					"1.3": {
+						Version:     "1.3.0",
+						VersionKey:  "1.3",
+						InstalledAt: "2026-01-03T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:      "dist/ExampleSans-Regular.otf",
+							SHA256:    strings.Repeat("b", 64),
+							LocalPath: local130,
+						}},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: requestedActivationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"activate", "example/family", "--version", "1.3"}); code == 0 {
+		t.Fatalf("expected activate failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"INPUT_REQUIRED: package is active in a different activation directory\n",
+		"  package_id: example/family\n",
+		"  current_activation_dir: " + currentActivationDir + "\n",
+		"  requested_activation_dir: " + requestedActivationDir + "\n",
+		"Next:\n",
+		"  run: fontpub deactivate example/family --activation-dir " + currentActivationDir + "\n",
+		"  or rerun with --activation-dir " + currentActivationDir + "\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
+		}
+	}
+	if _, err := os.Lstat(currentSymlink); err != nil {
+		t.Fatalf("expected original symlink to remain, err=%v", err)
+	}
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	if saved.Packages["example/family"].ActiveVersionKey == nil || *saved.Packages["example/family"].ActiveVersionKey != "1.2.3" {
+		t.Fatalf("unexpected active version after failed activate: %#v", saved.Packages["example/family"].ActiveVersionKey)
+	}
+}
+
 func TestActivateReusesExistingMatchingSymlinkPath(t *testing.T) {
 	stateDir := t.TempDir()
 	activationDir := t.TempDir()
@@ -1854,6 +2180,72 @@ func TestVerifyHumanReadableSuccess(t *testing.T) {
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("verify output missing %q\n%s", want, output)
+		}
+	}
+}
+
+func TestVerifyUsesDefaultActivationDirForDirectoryMismatch(t *testing.T) {
+	stateDir := t.TempDir()
+	defaultActivationDir := t.TempDir()
+	otherActivationDir := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	body := []byte("font-bytes")
+	if err := os.WriteFile(localPath, body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	sum := sha256.Sum256(body)
+	symlinkPath := filepath.Join(otherActivationDir, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(localPath, symlinkPath); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	active := "1.2.3"
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: &active,
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:        "dist/ExampleSans-Regular.otf",
+							SHA256:      fmtHex(sum[:]),
+							LocalPath:   localPath,
+							Active:      true,
+							SymlinkPath: &symlinkPath,
+						}},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir, DefaultActivationDir: defaultActivationDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"verify", "example/family"}); code == 0 {
+		t.Fatalf("expected verify failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"verification failed\n",
+		"active symlink is outside the selected activation directory (dist/ExampleSans-Regular.otf)\n",
+		"      symlink_path: " + symlinkPath + "\n",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("stderr missing %q\n%s", want, output)
 		}
 	}
 }
