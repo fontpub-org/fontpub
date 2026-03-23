@@ -59,6 +59,7 @@ func writeReadResult(w http.ResponseWriter, r *http.Request, body []byte, etag s
 		httpx.WriteJSON(w, status, protocol.ErrorEnvelope{Error: *errObj})
 		return
 	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if etag != "" {
 		w.Header().Set("ETag", etag)
 		if matchesIfNoneMatch(r.Header.Get("If-None-Match"), etag) {
@@ -66,7 +67,6 @@ func writeReadResult(w http.ResponseWriter, r *http.Request, body []byte, etag s
 			return
 		}
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
 }

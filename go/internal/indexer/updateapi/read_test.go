@@ -56,6 +56,12 @@ func TestReadRootIndexSupportsConditionalGET(t *testing.T) {
 	if rr.Code != http.StatusNotModified {
 		t.Fatalf("status=%d want %d", rr.Code, http.StatusNotModified)
 	}
+	if got := rr.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("content-type=%q want %q", got, "application/json; charset=utf-8")
+	}
+	if got := rr.Header().Get("ETag"); got != etag {
+		t.Fatalf("etag=%q want %q", got, etag)
+	}
 	if rr.Body.Len() != 0 {
 		t.Fatalf("unexpected body: %s", rr.Body.String())
 	}
@@ -131,6 +137,70 @@ func TestReadPackageDocumentsFallBackToDerivedDocuments(t *testing.T) {
 			Server{ArtifactStore: store}.Handler().ServeHTTP(rr, req)
 			if rr.Code != http.StatusOK {
 				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestReadPackageDocumentsReturnContentTypeOnConditionalGET(t *testing.T) {
+	store := artifacts.NewMemoryStore()
+	detail := testReadDetail("example/family", "1.2.3", "2026-01-02T00:00:00Z")
+	detailBody, err := protocol.MarshalCanonical(detail)
+	if err != nil {
+		t.Fatalf("MarshalCanonical(detail): %v", err)
+	}
+	detailETag := derive.ComputeETag(detailBody)
+	if err := store.PutVersionedPackageDetail(context.Background(), detail, detailBody, detailETag); err != nil {
+		t.Fatalf("PutVersionedPackageDetail: %v", err)
+	}
+
+	index, latestDetail, err := derive.BuildPackageVersionsIndex(detail.PackageID, []protocol.VersionedPackageDetail{detail})
+	if err != nil {
+		t.Fatalf("BuildPackageVersionsIndex: %v", err)
+	}
+	indexBody, err := protocol.MarshalCanonical(index)
+	if err != nil {
+		t.Fatalf("MarshalCanonical(index): %v", err)
+	}
+	indexETag := derive.ComputeETag(indexBody)
+	if err := store.PutPackageVersionsIndex(context.Background(), detail.PackageID, index, indexBody, indexETag); err != nil {
+		t.Fatalf("PutPackageVersionsIndex: %v", err)
+	}
+	latestBody, err := protocol.MarshalCanonical(latestDetail)
+	if err != nil {
+		t.Fatalf("MarshalCanonical(latest): %v", err)
+	}
+	latestETag := derive.ComputeETag(latestBody)
+	if err := store.PutLatestAlias(context.Background(), latestDetail.PackageID, latestBody, latestETag); err != nil {
+		t.Fatalf("PutLatestAlias: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+		etag string
+	}{
+		{name: "latest alias", path: "/v1/packages/example/family.json", etag: latestETag},
+		{name: "package index", path: "/v1/packages/example/family/index.json", etag: indexETag},
+		{name: "version detail", path: "/v1/packages/example/family/versions/1.2.3.json", etag: detailETag},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("If-None-Match", tc.etag)
+			rr := httptest.NewRecorder()
+			Server{ArtifactStore: store}.Handler().ServeHTTP(rr, req)
+			if rr.Code != http.StatusNotModified {
+				t.Fatalf("status=%d want %d", rr.Code, http.StatusNotModified)
+			}
+			if got := rr.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+				t.Fatalf("content-type=%q want %q", got, "application/json; charset=utf-8")
+			}
+			if got := rr.Header().Get("ETag"); got != tc.etag {
+				t.Fatalf("etag=%q want %q", got, tc.etag)
+			}
+			if rr.Body.Len() != 0 {
+				t.Fatalf("unexpected body: %s", rr.Body.String())
 			}
 		})
 	}
