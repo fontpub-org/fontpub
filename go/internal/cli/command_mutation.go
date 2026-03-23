@@ -72,11 +72,14 @@ func (a *App) runDeactivate(_ context.Context, args []string) int {
 	if errObj != nil {
 		return a.fail("deactivate", errObj)
 	}
+	if opts.ActivationDir == "" {
+		opts.ActivationDir = a.Config.DefaultActivationDir
+	}
 	lock, err := a.loadOrInitLockfile()
 	if err != nil {
 		return a.fail("deactivate", asCLIError(err))
 	}
-	planned, changed, decErr := a.deactivatePackage(&lock, opts.PackageID, opts.DryRun)
+	planned, changed, decErr := a.deactivatePackage(&lock, opts.PackageID, opts.ActivationDir, opts.DryRun)
 	if decErr != nil {
 		return a.fail("deactivate", asCLIError(decErr))
 	}
@@ -148,6 +151,9 @@ func (a *App) runUninstall(_ context.Context, args []string) int {
 	if errObj != nil {
 		return a.fail("uninstall", errObj)
 	}
+	if opts.ActivationDir == "" {
+		opts.ActivationDir = a.Config.DefaultActivationDir
+	}
 	lock, err := a.loadOrInitLockfile()
 	if err != nil {
 		return a.fail("uninstall", asCLIError(err))
@@ -179,7 +185,7 @@ func (a *App) runUninstall(_ context.Context, args []string) int {
 	for _, versionKey := range targetVersions {
 		version := pkg.InstalledVersions[versionKey]
 		for _, asset := range version.Assets {
-			if asset.SymlinkPath != nil {
+			if assetSymlinkPathMatchesActivationDir(asset, opts.ActivationDir) {
 				planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: opts.PackageID, VersionKey: versionKey, Path: asset.Path})
 				if !opts.DryRun {
 					if err := removeFileIfExists(*asset.SymlinkPath); err != nil {
@@ -201,7 +207,11 @@ func (a *App) runUninstall(_ context.Context, args []string) int {
 	if len(pkg.InstalledVersions) == 0 {
 		delete(lock.Packages, opts.PackageID)
 	} else {
-		pkg.ActiveVersionKey = nil
+		if active := chooseRepairActiveVersion(pkg); active == "" {
+			pkg.ActiveVersionKey = nil
+		} else {
+			pkg.ActiveVersionKey = &active
+		}
 		lock.Packages[opts.PackageID] = pkg
 	}
 	planned, err = a.finalizeLockMutation(lock, changed, opts.DryRun, planned, PlannedAction{Type: "write_lockfile", PackageID: opts.PackageID})

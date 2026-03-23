@@ -161,6 +161,16 @@ func activationLinkMatches(asset protocol.LockedAsset, activationDir string) boo
 	return filepath.Clean(resolved) == filepath.Clean(asset.LocalPath)
 }
 
+func assetSymlinkPathMatchesActivationDir(asset protocol.LockedAsset, activationDir string) bool {
+	if activationDir == "" {
+		return asset.SymlinkPath != nil && *asset.SymlinkPath != ""
+	}
+	if asset.SymlinkPath == nil || *asset.SymlinkPath == "" {
+		return false
+	}
+	return filepath.Clean(filepath.Dir(*asset.SymlinkPath)) == filepath.Clean(activationDir)
+}
+
 func chooseInstalledVersion(pkg protocol.LockedPackage, requested string) (string, *CLIError) {
 	if requested != "" {
 		versionKey, err := protocol.NormalizeVersionKey(requested)

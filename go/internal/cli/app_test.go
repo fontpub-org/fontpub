@@ -3151,6 +3151,165 @@ func TestDeactivateNoOpDoesNotRewriteLockfile(t *testing.T) {
 	}
 }
 
+func TestDeactivateScopesToRequestedActivationDir(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDirA := t.TempDir()
+	activationDirB := t.TempDir()
+	local123 := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	local130 := filepath.Join(stateDir, "packages", "example", "family", "1.3", "dist", "ExampleSans-Regular.otf")
+	for _, path := range []string{local123, local130} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("os.MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(filepath.Base(filepath.Dir(path))), 0o644); err != nil {
+			t.Fatalf("os.WriteFile: %v", err)
+		}
+	}
+	symlink130 := filepath.Join(activationDirB, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(local130, symlink130); err != nil {
+		t.Fatalf("os.Symlink(1.3): %v", err)
+	}
+	active := "1.3"
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: &active,
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:      "dist/ExampleSans-Regular.otf",
+							SHA256:    strings.Repeat("a", 64),
+							LocalPath: local123,
+						}},
+					},
+					"1.3": {
+						Version:     "1.3.0",
+						VersionKey:  "1.3",
+						InstalledAt: "2026-01-03T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:        "dist/ExampleSans-Regular.otf",
+							SHA256:      strings.Repeat("b", 64),
+							LocalPath:   local130,
+							Active:      true,
+							SymlinkPath: &symlink130,
+						}},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"deactivate", "example/family", "--activation-dir", activationDirA, "--json"}); code != 0 {
+		t.Fatalf("deactivate code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	if _, err := os.Lstat(symlink130); err != nil {
+		t.Fatalf("expected symlink outside activation dir to remain, err=%v", err)
+	}
+
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	pkg := saved.Packages["example/family"]
+	if pkg.ActiveVersionKey == nil || *pkg.ActiveVersionKey != "1.3" {
+		t.Fatalf("unexpected active version after scoped deactivate: %#v", pkg.ActiveVersionKey)
+	}
+	asset123 := pkg.InstalledVersions["1.2.3"].Assets[0]
+	if asset123.Active || asset123.SymlinkPath != nil {
+		t.Fatalf("expected inactive version to remain unchanged: %#v", asset123)
+	}
+	asset130 := pkg.InstalledVersions["1.3"].Assets[0]
+	if !asset130.Active || asset130.SymlinkPath == nil || *asset130.SymlinkPath != symlink130 {
+		t.Fatalf("expected active version outside selected dir to remain unchanged: %#v", asset130)
+	}
+}
+
+func TestUninstallScopesSymlinkRemovalToRequestedActivationDir(t *testing.T) {
+	stateDir := t.TempDir()
+	activationDirA := t.TempDir()
+	activationDirB := t.TempDir()
+	localPath := filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(localPath, []byte("font-bytes"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	symlinkPath := filepath.Join(activationDirB, "example--family--ExampleSans-Regular.otf")
+	if err := os.Symlink(localPath, symlinkPath); err != nil {
+		t.Fatalf("os.Symlink: %v", err)
+	}
+	active := "1.2.3"
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				ActiveVersionKey: &active,
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{{
+							Path:        "dist/ExampleSans-Regular.otf",
+							SHA256:      strings.Repeat("a", 64),
+							LocalPath:   localPath,
+							Active:      true,
+							SymlinkPath: &symlinkPath,
+						}},
+					},
+				},
+			},
+		},
+	}
+	lockfilePath := filepath.Join(stateDir, "fontpub.lock")
+	if err := (LockfileStore{Path: lockfilePath}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"uninstall", "example/family", "--all", "--yes", "--activation-dir", activationDirA, "--json"}); code != 0 {
+		t.Fatalf("uninstall code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+
+	if _, err := os.Stat(localPath); !os.IsNotExist(err) {
+		t.Fatalf("expected local asset removal, err=%v", err)
+	}
+	if _, err := os.Lstat(symlinkPath); err != nil {
+		t.Fatalf("expected symlink outside requested activation dir to remain, err=%v", err)
+	}
+
+	saved, ok, err := (LockfileStore{Path: lockfilePath}).Load()
+	if err != nil || !ok {
+		t.Fatalf("Load lockfile ok=%v err=%v", ok, err)
+	}
+	if _, ok := saved.Packages["example/family"]; ok {
+		t.Fatalf("expected package to be removed from lockfile: %#v", saved.Packages["example/family"])
+	}
+}
+
 func TestPackageInspectJSON(t *testing.T) {
 	root := t.TempDir()
 	fontPath := filepath.Join(root, "ExampleSans-BoldItalic.otf")

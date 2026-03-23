@@ -171,8 +171,9 @@ func parseVerifyOptions(args []string) (verifyOptions, *CLIError) {
 }
 
 type deactivateOptions struct {
-	PackageID string
-	DryRun    bool
+	PackageID     string
+	ActivationDir string
+	DryRun        bool
 }
 
 func parseDeactivateOptions(args []string) (deactivateOptions, *CLIError) {
@@ -184,8 +185,9 @@ func parseDeactivateOptions(args []string) (deactivateOptions, *CLIError) {
 		return deactivateOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "deactivate requires <owner>/<repo>", Details: map[string]any{}}
 	}
 	return deactivateOptions{
-		PackageID: normalizePackageID(parsed.positionals[0]),
-		DryRun:    parsed.boolValue("--dry-run"),
+		PackageID:     normalizePackageID(parsed.positionals[0]),
+		ActivationDir: parsed.stringValue("--activation-dir"),
+		DryRun:        parsed.boolValue("--dry-run"),
 	}, nil
 }
 
@@ -214,10 +216,11 @@ func parseRepairOptions(args []string) (repairOptions, *CLIError) {
 }
 
 type uninstallOptions struct {
-	PackageID string
-	Version   string
-	DryRun    bool
-	All       bool
+	PackageID     string
+	Version       string
+	ActivationDir string
+	DryRun        bool
+	All           bool
 }
 
 func parseUninstallOptions(args []string) (uninstallOptions, *CLIError) {
@@ -229,10 +232,11 @@ func parseUninstallOptions(args []string) (uninstallOptions, *CLIError) {
 		return uninstallOptions{}, &CLIError{Code: "INPUT_REQUIRED", Message: "uninstall requires <owner>/<repo>", Details: map[string]any{}}
 	}
 	return uninstallOptions{
-		PackageID: normalizePackageID(parsed.positionals[0]),
-		Version:   parsed.stringValue("--version"),
-		DryRun:    parsed.boolValue("--dry-run"),
-		All:       parsed.boolValue("--all"),
+		PackageID:     normalizePackageID(parsed.positionals[0]),
+		Version:       parsed.stringValue("--version"),
+		ActivationDir: parsed.stringValue("--activation-dir"),
+		DryRun:        parsed.boolValue("--dry-run"),
+		All:           parsed.boolValue("--all"),
 	}, nil
 }
 

@@ -58,20 +58,22 @@ func (a *App) activateVersion(lock *protocol.Lockfile, packageID, versionKey, ac
 	return planned, nil
 }
 
-func (a *App) deactivatePackage(lock *protocol.Lockfile, packageID string, dryRun bool) ([]PlannedAction, bool, error) {
+func (a *App) deactivatePackage(lock *protocol.Lockfile, packageID, activationDir string, dryRun bool) ([]PlannedAction, bool, error) {
 	pkg, ok := lock.Packages[packageID]
 	if !ok {
 		return nil, false, &CLIError{Code: "NOT_INSTALLED", Message: "package is not installed", Details: map[string]any{"package_id": packageID}}
 	}
 	planned := make([]PlannedAction, 0)
-	changed := pkg.ActiveVersionKey != nil
+	changed := false
 	for versionKey, version := range pkg.InstalledVersions {
 		for i := range version.Assets {
-			if version.Assets[i].Active {
+			if activationDir != "" && !assetSymlinkPathMatchesActivationDir(version.Assets[i], activationDir) {
+				continue
+			}
+			if version.Assets[i].Active || version.Assets[i].SymlinkPath != nil {
 				changed = true
 			}
 			if version.Assets[i].SymlinkPath != nil {
-				changed = true
 				planned = append(planned, PlannedAction{Type: "remove_symlink", PackageID: packageID, VersionKey: versionKey, Path: version.Assets[i].Path})
 				if !dryRun {
 					if err := removeFileIfExists(*version.Assets[i].SymlinkPath); err != nil {
@@ -84,7 +86,11 @@ func (a *App) deactivatePackage(lock *protocol.Lockfile, packageID string, dryRu
 		}
 		pkg.InstalledVersions[versionKey] = version
 	}
-	pkg.ActiveVersionKey = nil
+	if active := chooseRepairActiveVersion(pkg); active == "" {
+		pkg.ActiveVersionKey = nil
+	} else {
+		pkg.ActiveVersionKey = &active
+	}
 	lock.Packages[packageID] = pkg
 	return planned, changed, nil
 }

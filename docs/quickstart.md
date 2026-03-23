@@ -270,22 +270,16 @@ A practical local-only flow is:
    - `FONTPUB_ARTIFACTS_DIR=/path/to/artifacts`
    - `FONTPUB_DEV_LOCAL_REPO_MAP='owner/repo=/path/to/local/repo'`
 4. publish into the local artifacts directory
-5. serve the artifacts directory with a static file server
+5. use the same local indexer for read access to `/v1/index.json` and package documents
 6. run the user CLI with:
    - `FONTPUB_BASE_URL=http://127.0.0.1:<port>`
    - `FONTPUB_DEV_LOCAL_REPO_MAP='owner/repo=/path/to/local/repo'`
 
-Example static file server:
-
-```bash
-python3 -m http.server 18081 --bind 127.0.0.1 --directory /path/to/artifacts
-```
-
-Example user CLI invocation against the local artifacts:
+Example user CLI invocation against the local indexer:
 
 ```bash
 cd go
-FONTPUB_BASE_URL=http://127.0.0.1:18081 \
+FONTPUB_BASE_URL=http://127.0.0.1:18080 \
 FONTPUB_STATE_DIR=/tmp/fontpub-user-state \
 FONTPUB_ACTIVATION_DIR=/tmp/fontpub-user-fonts \
 FONTPUB_DEV_LOCAL_REPO_MAP='owner/repo=/path/to/local/repo' \
@@ -298,7 +292,7 @@ If you want to run the whole local-only flow in one command, use the helper scri
 tools/scripts/local-dev-e2e.sh --package-id owner/repo --repo /path/to/local/repo --tag 1.002 --keep
 ```
 
-The script generates a temporary dev JWT, runs the local indexer, serves the generated artifacts, and exercises `fontpub ls-remote/show/install/ls/verify` against them.
+The script generates a temporary dev JWT, runs the local indexer, publishes into a temporary artifact directory, and exercises `fontpub ls-remote/show/install/ls/verify` against the indexer's read API.
 
 ## Run Tests
 
