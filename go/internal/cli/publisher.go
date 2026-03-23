@@ -388,7 +388,7 @@ func inferenceRecordsToAny(records []inferenceRecord) []any {
 		out = append(out, map[string]any{
 			"field":  record.Field,
 			"value":  record.Value,
-			"source": record.Source,
+			"source": publicInferenceSource(record.Source),
 		})
 	}
 	return out
@@ -401,7 +401,7 @@ func conflictRecordsToAny(records []conflictRecord) []any {
 		for _, candidate := range record.Candidates {
 			candidates = append(candidates, map[string]any{
 				"value":  candidate.Value,
-				"source": candidate.Source,
+				"source": publicInferenceSource(candidate.Source),
 			})
 		}
 		item := map[string]any{
@@ -415,6 +415,19 @@ func conflictRecordsToAny(records []conflictRecord) []any {
 		out = append(out, item)
 	}
 	return out
+}
+
+func publicInferenceSource(source string) string {
+	switch source {
+	case "embedded_metadata", "group_embedded_metadata":
+		return "embedded_metadata"
+	case "filename_heuristic", "repository_readme", "repository_owner", "repository_changelog", "repository_tag":
+		return "filename_heuristic"
+	case "user_input":
+		return "user_input"
+	default:
+		return "filename_heuristic"
+	}
 }
 
 func stringSliceToAny(values []string) []any {

@@ -23,7 +23,7 @@
             "properties": {
               "field": { "type": "string" },
               "value": {},
-              "source": { "enum": ["embedded_metadata", "group_embedded_metadata", "filename_heuristic", "user_input", "repository_readme", "repository_owner", "repository_changelog", "repository_tag"] }
+              "source": { "enum": ["embedded_metadata", "filename_heuristic", "user_input"] }
             }
           }
         },
@@ -45,7 +45,7 @@
                   "required": ["value", "source"],
                   "properties": {
                     "value": { "type": "string" },
-                    "source": { "enum": ["embedded_metadata", "group_embedded_metadata", "filename_heuristic", "user_input", "repository_readme", "repository_owner", "repository_changelog", "repository_tag"] }
+                    "source": { "enum": ["embedded_metadata", "filename_heuristic", "user_input"] }
                   }
                 }
               }

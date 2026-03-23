@@ -193,21 +193,19 @@ func chooseRepositoryCandidate(field string, candidates []conflictCandidate) (st
 	if len(ordered) == 0 {
 		return "", "", conflictRecord{}
 	}
-	chosen := ordered[0]
-	conflict := conflictRecord{}
 	distinct := map[string]struct{}{}
 	for _, candidate := range ordered {
 		distinct[candidate.Value] = struct{}{}
 	}
 	if len(distinct) > 1 {
-		conflict = conflictRecord{
-			Field:       field,
-			Resolved:    true,
-			ChosenValue: chosen.Value,
-			Candidates:  ordered,
+		return "", "", conflictRecord{
+			Field:      field,
+			Resolved:   false,
+			Candidates: ordered,
 		}
 	}
-	return chosen.Value, chosen.Source, conflict
+	chosen := ordered[0]
+	return chosen.Value, chosen.Source, conflictRecord{}
 }
 
 func dedupeConflictCandidates(candidates []conflictCandidate) []conflictCandidate {

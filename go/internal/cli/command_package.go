@@ -50,6 +50,7 @@ func (a *App) runPackageInit(_ context.Context, args []string) int {
 			return a.fail("package init", asCLIError(err))
 		}
 		unresolved = unresolvedFields(manifest)
+		conflicts = finalizeConflicts(conflicts, manifest)
 		if len(unresolved) > 0 {
 			return a.fail("package init", &CLIError{Code: "INPUT_REQUIRED", Message: "required manifest fields could not be resolved", Details: map[string]any{"unresolved_fields": unresolved}})
 		}

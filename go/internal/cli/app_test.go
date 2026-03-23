@@ -2262,7 +2262,7 @@ func TestPackageInitJSONGroupsSameStemFormats(t *testing.T) {
 		source, _ := record["source"].(string)
 		sources[field] = source
 	}
-	if sources["files[1].style"] != "group_embedded_metadata" || sources["files[1].weight"] != "group_embedded_metadata" {
+	if sources["files[1].style"] != "embedded_metadata" || sources["files[1].weight"] != "embedded_metadata" {
 		t.Fatalf("unexpected grouped inference sources: %#v", sources)
 	}
 }
@@ -2313,7 +2313,7 @@ func TestPackageInitJSONInfersAuthorFromREADME(t *testing.T) {
 		source, _ := record["source"].(string)
 		sources[field] = source
 	}
-	if sources["author"] != "repository_readme" {
+	if sources["author"] != "filename_heuristic" {
 		t.Fatalf("unexpected author source: %#v", sources)
 	}
 }
@@ -2364,7 +2364,7 @@ func TestPackageInitJSONInfersVersionFromChangelog(t *testing.T) {
 		source, _ := record["source"].(string)
 		sources[field] = source
 	}
-	if sources["version"] != "repository_changelog" {
+	if sources["version"] != "filename_heuristic" {
 		t.Fatalf("unexpected version source: %#v", sources)
 	}
 }
@@ -2420,12 +2420,12 @@ func TestPackageInitJSONInfersVersionFromGitTag(t *testing.T) {
 		source, _ := record["source"].(string)
 		sources[field] = source
 	}
-	if sources["version"] != "repository_tag" {
+	if sources["version"] != "filename_heuristic" {
 		t.Fatalf("unexpected version source: %#v", sources)
 	}
 }
 
-func TestPackageInitJSONReportsResolvedVersionConflict(t *testing.T) {
+func TestPackageInitJSONFailsOnAmbiguousVersionConflict(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "fonts"), 0o755); err != nil {
 		t.Fatalf("os.MkdirAll: %v", err)
@@ -2449,26 +2449,25 @@ func TestPackageInitJSONReportsResolvedVersionConflict(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	app := App{Config: Config{StateDir: t.TempDir()}, Stdout: &stdout, Stderr: &stderr}
-	if code := app.Run(context.Background(), []string{"package", "init", root, "--json"}); code != 0 {
-		t.Fatalf("package init code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	if code := app.Run(context.Background(), []string{"package", "init", root, "--json"}); code == 0 {
+		t.Fatalf("expected package init failure")
 	}
 	var env protocol.CLIEnvelope
 	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	conflicts, ok := env.Data["conflicts"].([]any)
+	if env.OK {
+		t.Fatalf("expected failure envelope: %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != "INPUT_REQUIRED" {
+		t.Fatalf("unexpected error: %+v", env.Error)
+	}
+	unresolved, ok := env.Error.Details["unresolved_fields"].([]any)
 	if !ok {
-		t.Fatalf("unexpected conflicts: %#v", env.Data["conflicts"])
+		t.Fatalf("unexpected unresolved_fields: %#v", env.Error.Details["unresolved_fields"])
 	}
-	if len(conflicts) != 1 {
-		t.Fatalf("unexpected conflicts length: %#v", conflicts)
-	}
-	conflict, ok := conflicts[0].(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected conflict: %#v", conflicts[0])
-	}
-	if conflict["field"] != "version" || conflict["resolved"] != true || conflict["chosen_value"] != "1.002" {
-		t.Fatalf("unexpected conflict payload: %#v", conflict)
+	if len(unresolved) != 1 || unresolved[0] != "version" {
+		t.Fatalf("unexpected unresolved_fields: %#v", unresolved)
 	}
 }
 
@@ -2481,7 +2480,7 @@ func TestPackageInitHumanReadableReportsConflicts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "fonts", "ExampleSans-Regular.ttf"), fontBody, 0o644); err != nil {
 		t.Fatalf("os.WriteFile ttf: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"license":"OFL-1.1","files":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "fontpub.json"), []byte(`{"version":"1.002","license":"OFL-1.1","files":[]}`), 0o644); err != nil {
 		t.Fatalf("os.WriteFile manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("Copyright (c) 2026 [Example Studio](https://example.test)\n"), 0o644); err != nil {
@@ -2497,7 +2496,7 @@ func TestPackageInitHumanReadableReportsConflicts(t *testing.T) {
 		Config: Config{StateDir: t.TempDir()},
 		Stdout: &stdout,
 		Stderr: &stderr,
-		Stdin:  strings.NewReader("1.002\n"),
+		Stdin:  strings.NewReader("Example Studio\n"),
 		IsTTY:  func() bool { return true },
 	}
 	if code := app.Run(context.Background(), []string{"package", "init", root}); code != 0 {
