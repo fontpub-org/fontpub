@@ -64,7 +64,7 @@ func packageInstallDisplayRoot(stateDir, packageID, versionKey string) string {
 
 func (a *App) writeInstallResult(packageID, versionKey string, activate bool, activationDir string, changed, dryRun bool, planned []PlannedAction) int {
 	if a.JSON {
-		return a.writeMutationResult("install", changed, planned, map[string]any{"package_id": packageID, "version_key": versionKey})
+		return a.writeMutationResult("install", changed, dryRun, planned)
 	}
 	if activate && activationDir == "" {
 		activationDir = a.Config.DefaultActivationDir
@@ -94,7 +94,7 @@ func (a *App) writeInstallResult(packageID, versionKey string, activate bool, ac
 
 func (a *App) writeActivateResult(packageID, versionKey, activationDir string, dryRun bool, planned []PlannedAction) int {
 	if a.JSON {
-		return a.writeMutationResult("activate", true, planned, map[string]any{"package_id": packageID, "version_key": versionKey})
+		return a.writeMutationResult("activate", true, dryRun, planned)
 	}
 	if dryRun {
 		fmt.Fprintf(a.Stdout, "Activation plan for %s\n", concisePackageVersion(packageID, versionKey))
@@ -115,7 +115,7 @@ func (a *App) writeActivateResult(packageID, versionKey, activationDir string, d
 
 func (a *App) writeDeactivateResult(packageID string, changed, dryRun bool, planned []PlannedAction) int {
 	if a.JSON {
-		return a.writeMutationResult("deactivate", changed, planned, map[string]any{"package_id": packageID})
+		return a.writeMutationResult("deactivate", changed, dryRun, planned)
 	}
 	if !changed {
 		fmt.Fprintf(a.Stdout, "%s is already inactive\n", packageID)
@@ -135,7 +135,7 @@ func (a *App) writeDeactivateResult(packageID string, changed, dryRun bool, plan
 
 func (a *App) writeUninstallResult(packageID string, targetVersions []string, changed, dryRun bool, planned []PlannedAction) int {
 	if a.JSON {
-		return a.writeMutationResult("uninstall", changed, planned, map[string]any{"package_id": packageID})
+		return a.writeMutationResult("uninstall", changed, dryRun, planned)
 	}
 	if !changed {
 		fmt.Fprintf(a.Stdout, "No installed versions were removed for %s\n", packageID)
@@ -162,7 +162,7 @@ func (a *App) writeUninstallResult(packageID string, targetVersions []string, ch
 
 func (a *App) writeUpdateResult(target string, changed, activate, dryRun bool, activationDir string, planned []PlannedAction) int {
 	if a.JSON {
-		return a.writeMutationResult("update", changed, planned, map[string]any{})
+		return a.writeMutationResult("update", changed, dryRun, planned)
 	}
 	if activate && activationDir == "" {
 		activationDir = a.Config.DefaultActivationDir

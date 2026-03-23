@@ -44,3 +44,7 @@ func DefaultConfig() Config {
 func (c Config) LockfilePath() string {
 	return filepath.Join(c.StateDir, "fontpub.lock")
 }
+
+func (c Config) MetadataCachePath() string {
+	return filepath.Join(c.StateDir, "metadata-cache.json")
+}

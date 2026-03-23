@@ -41,12 +41,9 @@ func (a *App) writeValidatedJSONSuccess(command string, data map[string]any, val
 	return a.writeJSON(env)
 }
 
-func (a *App) writeMutationResult(command string, changed bool, planned []PlannedAction, extra map[string]any) int {
+func (a *App) writeMutationResult(command string, changed, dryRun bool, planned []PlannedAction) int {
 	data := map[string]any{"changed": changed}
-	for k, v := range extra {
-		data[k] = v
-	}
-	if len(planned) > 0 {
+	if dryRun {
 		data["planned_actions"] = plannedActionsToAny(planned)
 	}
 	if a.JSON {

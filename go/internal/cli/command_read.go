@@ -15,7 +15,7 @@ func (a *App) runLSRemote(ctx context.Context, args []string) int {
 	if len(args) != 0 {
 		return a.fail("ls-remote", &CLIError{Code: "INPUT_REQUIRED", Message: "ls-remote does not accept positional arguments", Details: map[string]any{}})
 	}
-	root, err := a.Client.GetRootIndex(ctx)
+	root, err := a.loadRootIndex(ctx)
 	if err != nil {
 		return a.fail("ls-remote", asCLIError(err))
 	}
@@ -260,4 +260,23 @@ func (a *App) runVerify(_ context.Context, args []string) int {
 	}
 	printPackageCheckResults(a.Stdout, "Verification results:", results)
 	return 0
+}
+
+func (a *App) loadRootIndex(ctx context.Context) (protocol.RootIndex, error) {
+	cache := MetadataCacheStore{Path: a.Config.MetadataCachePath()}
+	cachedRoot, cachedETag, hasCached := cache.LoadRootIndex()
+	root, body, etag, notModified, err := a.Client.FetchRootIndex(ctx, cachedETag)
+	if err != nil {
+		return protocol.RootIndex{}, err
+	}
+	if notModified {
+		if hasCached {
+			return cachedRoot, nil
+		}
+		return protocol.RootIndex{}, &CLIError{Code: "INTERNAL_ERROR", Message: "received 304 without cached root index", Details: map[string]any{"path": "/v1/index.json"}}
+	}
+	if err := cache.SaveRootIndex(body, etag); err != nil {
+		_ = removeMetadataCache(cache.Path)
+	}
+	return root, nil
 }

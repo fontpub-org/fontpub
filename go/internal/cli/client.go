@@ -50,6 +50,58 @@ func (c *MetadataClient) GetRootIndex(ctx context.Context) (protocol.RootIndex, 
 	return out, nil
 }
 
+func (c *MetadataClient) FetchRootIndex(ctx context.Context, ifNoneMatch string) (protocol.RootIndex, []byte, string, bool, error) {
+	if c.HTTPClient == nil {
+		c.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	}
+	endpoint, err := url.Parse(c.BaseURL + "/v1/index.json")
+	if err != nil {
+		return protocol.RootIndex{}, nil, "", false, &CLIError{Code: "INTERNAL_ERROR", Message: "invalid base URL", Details: map[string]any{"path": "/v1/index.json"}}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return protocol.RootIndex{}, nil, "", false, &CLIError{Code: "INTERNAL_ERROR", Message: "could not create request", Details: map[string]any{"path": "/v1/index.json"}}
+	}
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
+	}
+	if ifNoneMatch != "" {
+		req.Header.Set("If-None-Match", ifNoneMatch)
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return protocol.RootIndex{}, nil, "", false, &CLIError{Code: "INTERNAL_ERROR", Message: "request failed", Details: map[string]any{"path": "/v1/index.json", "reason": err.Error()}}
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return protocol.RootIndex{}, nil, "", false, &CLIError{Code: "INTERNAL_ERROR", Message: "could not read response", Details: map[string]any{"path": "/v1/index.json"}}
+	}
+	etag := resp.Header.Get("ETag")
+	if resp.StatusCode == http.StatusNotModified {
+		if etag == "" {
+			etag = ifNoneMatch
+		}
+		return protocol.RootIndex{}, nil, etag, true, nil
+	}
+	if resp.StatusCode >= 400 {
+		var env protocol.ErrorEnvelope
+		if err := json.Unmarshal(body, &env); err == nil && env.Error.Code != "" {
+			return protocol.RootIndex{}, nil, "", false, &CLIError{Code: env.Error.Code, Message: env.Error.Message, Details: env.Error.Details}
+		}
+		return protocol.RootIndex{}, nil, "", false, &CLIError{
+			Code:    "INTERNAL_ERROR",
+			Message: fmt.Sprintf("request failed with status %d", resp.StatusCode),
+			Details: map[string]any{"path": "/v1/index.json", "status": resp.StatusCode},
+		}
+	}
+	var out protocol.RootIndex
+	if err := json.Unmarshal(body, &out); err != nil {
+		return protocol.RootIndex{}, nil, "", false, &CLIError{Code: "INTERNAL_ERROR", Message: "response JSON was invalid", Details: map[string]any{"path": "/v1/index.json"}}
+	}
+	return out, body, etag, false, nil
+}
+
 func (c *MetadataClient) GetLatestPackageDetail(ctx context.Context, packageID string) (protocol.VersionedPackageDetail, error) {
 	var out protocol.VersionedPackageDetail
 	if err := c.getJSON(ctx, "/v1/packages/"+normalizePackageID(packageID)+".json", &out); err != nil {

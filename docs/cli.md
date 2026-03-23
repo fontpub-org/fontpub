@@ -287,6 +287,9 @@ When `--json` is set:
   - `~/.fontpub/packages/<owner>/<repo>/<version_key>/...`
 - Lockfile:
   - `~/.fontpub/fontpub.lock`
+- Metadata cache:
+  - `~/.fontpub/metadata-cache.json`
+  - stores the cached `/v1/index.json` response body and `ETag` for `ls-remote`
 
 ## Activation directory
 

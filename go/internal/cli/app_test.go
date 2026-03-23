@@ -166,6 +166,108 @@ func TestRunLSRemoteHumanReadableEmptyState(t *testing.T) {
 	}
 }
 
+func TestRunLSRemoteUsesMetadataCacheETag(t *testing.T) {
+	stateDir := t.TempDir()
+	requests := 0
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				requests++
+				if req.URL.Path != "/v1/index.json" {
+					return jsonResponse(http.StatusNotFound, protocol.ErrorEnvelope{Error: protocol.ErrorObject{Code: "PACKAGE_NOT_FOUND", Message: "not found", Details: map[string]any{}}}), nil
+				}
+				switch requests {
+				case 1:
+					resp := jsonResponse(http.StatusOK, protocol.RootIndex{
+						SchemaVersion: "1",
+						GeneratedAt:   "2026-01-02T00:00:00Z",
+						Packages: map[string]protocol.RootIndexPackage{
+							"example/family": {LatestVersion: "1.2.3", LatestVersionKey: "1.2.3", LatestPublishedAt: "2026-01-02T00:00:00Z"},
+						},
+					})
+					resp.Header.Set("ETag", `"etag-1"`)
+					return resp, nil
+				case 2:
+					if got := req.Header.Get("If-None-Match"); got != `"etag-1"` {
+						t.Fatalf("If-None-Match=%q want %q", got, `"etag-1"`)
+					}
+					return &http.Response{
+						StatusCode: http.StatusNotModified,
+						Header:     http.Header{"ETag": []string{`"etag-1"`}},
+						Body:       io.NopCloser(strings.NewReader("")),
+					}, nil
+				default:
+					t.Fatalf("unexpected request #%d", requests)
+					return nil, nil
+				}
+			}),
+		},
+	}
+
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: stateDir},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"ls-remote", "--json"}); code != 0 {
+		t.Fatalf("first ls-remote code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "metadata-cache.json")); err != nil {
+		t.Fatalf("os.Stat(metadata-cache): %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := app.Run(context.Background(), []string{"ls-remote", "--json"}); code != 0 {
+		t.Fatalf("second ls-remote code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if requests != 2 {
+		t.Fatalf("requests=%d want 2", requests)
+	}
+}
+
+func TestRunLSRemoteIgnoresCorruptMetadataCache(t *testing.T) {
+	stateDir := t.TempDir()
+	cachePath := filepath.Join(stateDir, "metadata-cache.json")
+	if err := os.WriteFile(cachePath, []byte("{not-json"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(cache): %v", err)
+	}
+	client := &MetadataClient{
+		BaseURL:   "https://fontpub.org",
+		UserAgent: "test",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if got := req.Header.Get("If-None-Match"); got != "" {
+					t.Fatalf("unexpected If-None-Match: %q", got)
+				}
+				resp := jsonResponse(http.StatusOK, protocol.RootIndex{
+					SchemaVersion: "1",
+					GeneratedAt:   "2026-01-02T00:00:00Z",
+					Packages: map[string]protocol.RootIndexPackage{
+						"example/family": {LatestVersion: "1.2.3", LatestVersionKey: "1.2.3", LatestPublishedAt: "2026-01-02T00:00:00Z"},
+					},
+				})
+				resp.Header.Set("ETag", `"etag-1"`)
+				return resp, nil
+			}),
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{BaseURL: "https://fontpub.org", StateDir: stateDir},
+		Client: client,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"ls-remote", "--json"}); code != 0 {
+		t.Fatalf("ls-remote code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestRunLSRemoteNetworkFailureSuggestsConnectivity(t *testing.T) {
 	client := &MetadataClient{
 		BaseURL:   "https://fontpub.org",
@@ -1331,6 +1433,54 @@ func TestActivationDirErrorSuggestsFlagOrEnv(t *testing.T) {
 	}
 }
 
+func TestDeactivateDryRunJSONIncludesEmptyPlannedActions(t *testing.T) {
+	stateDir := t.TempDir()
+	lock := protocol.Lockfile{
+		SchemaVersion: "1",
+		GeneratedAt:   "2026-01-02T00:00:00Z",
+		Packages: map[string]protocol.LockedPackage{
+			"example/family": {
+				InstalledVersions: map[string]protocol.InstalledVersion{
+					"1.2.3": {
+						Version:     "1.2.3",
+						VersionKey:  "1.2.3",
+						InstalledAt: "2026-01-02T00:00:00Z",
+						Assets: []protocol.LockedAsset{
+							{Path: "dist/ExampleSans-Regular.otf", SHA256: strings.Repeat("a", 64), LocalPath: filepath.Join(stateDir, "packages", "example", "family", "1.2.3", "dist", "ExampleSans-Regular.otf")},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := (LockfileStore{Path: filepath.Join(stateDir, "fontpub.lock")}).Save(lock); err != nil {
+		t.Fatalf("Save lockfile: %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Config: Config{StateDir: stateDir},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+	if code := app.Run(context.Background(), []string{"deactivate", "example/family", "--dry-run", "--json"}); code != 0 {
+		t.Fatalf("deactivate dry-run code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	var env protocol.CLIEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if env.Data["changed"] != false {
+		t.Fatalf("unexpected changed: %#v", env.Data["changed"])
+	}
+	planned, ok := env.Data["planned_actions"].([]any)
+	if !ok || len(planned) != 0 {
+		t.Fatalf("unexpected planned_actions: %#v", env.Data["planned_actions"])
+	}
+	if _, ok := env.Data["package_id"]; ok {
+		t.Fatalf("unexpected package_id in mutation result: %#v", env.Data)
+	}
+}
+
 func TestActivateUsesNormalizedRequestedVersionAndWritesJSON(t *testing.T) {
 	stateDir := t.TempDir()
 	activationDir := t.TempDir()
@@ -1403,7 +1553,7 @@ func TestActivateUsesNormalizedRequestedVersionAndWritesJSON(t *testing.T) {
 	if env.Command != "activate" || !env.OK {
 		t.Fatalf("unexpected env: %+v", env)
 	}
-	if env.Data["version_key"] != "1.3" {
+	if _, ok := env.Data["version_key"]; ok {
 		t.Fatalf("unexpected version_key: %#v", env.Data["version_key"])
 	}
 

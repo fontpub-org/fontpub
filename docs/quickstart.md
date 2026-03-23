@@ -149,6 +149,8 @@ go run ./cmd/fontpub ls --json
 go run ./cmd/fontpub show owner/repo --json
 ```
 
+`ls-remote` caches the root index response and `ETag` under `FONTPUB_STATE_DIR/metadata-cache.json` or `~/.fontpub/metadata-cache.json`.
+
 To exercise install and activation flows, you need a running Fontpub metadata service and published package metadata.
 
 ## Run The Local Operator Binaries
